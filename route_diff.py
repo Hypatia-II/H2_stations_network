@@ -30,6 +30,25 @@ class Data():
             
         return shapes
     
+    @staticmethod
+    def calculate_road_density(shapefiles):
+        routes = shapefiles['VSMAP_TOUT']
+        routes = routes[routes.lib_rte.str.startswith('A')]
+        regions = shapefiles['FRA_adm1']
+        regions = regions.to_crs(epsg=2154)
+        regions['area_m'] = regions.geometry.area
+
+        joined = gpd.sjoin(routes, regions, predicate='within')
+        joined['length_m'] = joined.geometry.length
+
+        total_length_by_region = joined.groupby('NAME_1')['length_m'].sum()
+        regions = pd.merge(regions, total_length_by_region, on='NAME_1', how='inner')
+        regions['road_density'] = regions['length_m'] / regions['area_m']
+        
+        return regions[['NAME_1', 'road_density', 'length_m', 'area_m']].sort_values(by='road_density', ascending=False)
+    
+
+# scwript
 os.chdir(r"C:\Users\ckunt\OneDrive\Documents\Masters work\HEC\22. Sustainability Challenge\sust_challenge")
 
 path = 'data/'
@@ -37,4 +56,16 @@ path = 'data/'
 data = Data()
 shapefiles = data.get_shapefiles(path)
 
-shapefiles['ProfilsTravers_RRN_2022']
+routes = shapefiles['VSMAP_TOUT']
+routes = routes[routes.lib_rte.str.startswith('A')]
+regions = shapefiles['FRA_adm1']
+regions = regions.to_crs(epsg=2154)
+regions['area_m'] = regions.geometry.area
+
+joined = gpd.sjoin(routes, regions, predicate='within')
+joined['length_m'] = joined.geometry.length
+
+total_length_by_region = joined.groupby('NAME_1')['length_m'].sum()
+regions = pd.merge(regions, total_length_by_region, on='NAME_1', how='inner')
+regions['road_density'] = regions['length_m'] / regions['area_m']
+regions[['NAME_1', 'road_density', 'length_m', 'area_m']].sort_values(by='road_density', ascending=False)
