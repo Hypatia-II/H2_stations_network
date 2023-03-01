@@ -4,7 +4,7 @@ import pandas as pd
 from tqdm import tqdm
 
 class Data():
-    def __init__(self, path) -> None:
+    def __init__(self, path: str = '../data/') -> None:
         self.path = path
     
     def get_shapefiles(self) -> dict:
@@ -21,14 +21,13 @@ class Data():
         shapefiles = glob.glob(self.path + '*.shp')
         shapes = {}
         for shapefile in tqdm(shapefiles):
-            name  = shapefile.split('\\')[-1].split('.')[0]
-            
+            name  = shapefile.split('/')[-1].split('\\')[-1].split('.')[0]
             shapes[name] = gpd.read_file(shapefile)
             
         return shapes
     
-    @staticmethod
-    def calculate_road_density(shapefiles: dict,
+    def calculate_road_density(self,
+                               shapefiles: dict,
                                highways_only: bool = True) -> pd.DataFrame:
         """Calculate road density per region
         
@@ -39,7 +38,6 @@ class Data():
         Returns:
             df: dataframe breaking down road density for each region
         """
-        
         routes = shapefiles['VSMAP_TOUT']
         
         if highways_only:
@@ -60,13 +58,14 @@ class Data():
         df = regions[['NAME_1', 'road_density', 'length_m', 'area_m']].sort_values(by='road_density', ascending=False)
         
         return df    
+    
+    def create_df(self,
+                  highways_only: bool = False) -> pd.DataFrame:
+    
+        shapefiles = self.get_shapefiles()
+        df = self.calculate_road_density(shapefiles, highways_only = highways_only)
+        
+        return df
 
 
-def create_df(path: str = '../data/', 
-              highways_only: bool = False) -> pd.DataFrame:
-    
-    data = Data(path)
-    shapefiles = data.get_shapefiles()
-    df = data.calculate_road_density(shapefiles, highways_only = highways_only)
-    
-    return df
+
