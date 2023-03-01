@@ -53,15 +53,25 @@ class Data():
         total_length_by_region = joined.groupby('NAME_1')['length_m'].sum()
         
         regions = pd.merge(regions, total_length_by_region, on='NAME_1', how='inner')
+        regions['length_max'] = joined.groupby('NAME_1')['length_m'].max().values
+        regions['length_mean'] = joined.groupby('NAME_1')['length_m'].mean().values
+        
         regions['road_density'] = regions['length_m'] / regions['area_m']
         
-        df = regions[['NAME_1', 'road_density', 'length_m', 'area_m']].sort_values(by='road_density', ascending=False)
+        df = regions[['NAME_1', 'road_density', 'length_m', 'area_m', 'length_max', 'length_mean']].sort_values(by='road_density', ascending=False)
         
-        return df    
+        return df
     
     def create_df(self,
                   highways_only: bool = False) -> pd.DataFrame:
-    
+        """Create the initial dataframe and calculate road density
+
+        Args:
+            highways_only (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            pd.DataFrame: _description_
+        """
         shapefiles = self.get_shapefiles()
         df = self.calculate_road_density(shapefiles, highways_only = highways_only)
         

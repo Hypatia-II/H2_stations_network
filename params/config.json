@@ -1,0 +1,13 @@
+{
+    "path_log": "params/logs.log",
+    "avg_speed": 80,
+    "max_hours_drive": 9,
+    "market_share": [0.14, 0.13, 0.12],
+    "autonomy_share": [1000, 150, 400],
+    "tank_share": [80, 40, 32],
+    "market_share_trucks": ["VOLVO", "DAF", "IVECO"], 
+    "H": 24,
+    "time_fill_tank": 0.25,
+    "target_trucks_2030": 1e4,
+    "target_trucks_2040": 6e4
+}
