@@ -48,12 +48,12 @@ class Data():
         regions['area_m'] = regions.geometry.area
 
         joined = gpd.sjoin(routes, regions, predicate='within')
-        joined['length_m'] = joined.geometry.length
+        joined['length_m'] = joined.geometry.length * 1_000
 
         total_length_by_region = joined.groupby('NAME_1')['length_m'].sum()
         
         regions = pd.merge(regions, total_length_by_region, on='NAME_1', how='inner')
-        regions['length_max'] = joined.groupby('NAME_1')['length_m'].max().values
+        regions['length_max'] = joined.groupby('NAME_1')['length_m'].max().values 
         regions['length_mean'] = joined.groupby('NAME_1')['length_m'].mean().values
         
         regions['road_density'] = regions['length_m'] / regions['area_m']
@@ -76,6 +76,3 @@ class Data():
         df = self.calculate_road_density(shapefiles, highways_only = highways_only)
         
         return df
-
-
-
