@@ -48,14 +48,19 @@ class Data():
         regions['area_m'] = regions.geometry.area
 
         joined = gpd.sjoin(routes, regions, predicate='within')
-        joined['length_m'] = joined.geometry.length * 1_000
+        joined['length_m'] = joined.geometry.length
 
         total_length_by_region = joined.groupby('NAME_1')['length_m'].sum()
         
         regions = pd.merge(regions, total_length_by_region, on='NAME_1', how='inner')
-        regions['length_max'] = joined.groupby('NAME_1')['length_m'].max().values 
-        regions['length_mean'] = joined.groupby('NAME_1')['length_m'].mean().values
+        #absolute mess of calculations
+        temp_a = (joined.groupby(['NAME_1', 'lib_rte'])['length_m'].sum() / 2).groupby('NAME_1').max()
+        temp_b = (joined.groupby(['NAME_1', 'lib_rte'])['length_m'].sum() / 2).groupby('NAME_1').mean()
+
+        temp_c = pd.merge(temp_a, temp_b, on='NAME_1').rename(columns={'length_m_x': 'length_max',
+                                                                       'length_m_y': 'length_mean'})
         
+        regions = pd.merge(regions, temp_c, on='NAME_1', how='inner')
         regions['road_density'] = regions['length_m'] / regions['area_m']
         
         df = regions[['NAME_1', 'road_density', 'length_m', 'area_m', 'length_max', 'length_mean']].sort_values(by='road_density', ascending=False)
