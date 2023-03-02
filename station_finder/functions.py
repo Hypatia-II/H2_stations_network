@@ -28,6 +28,33 @@ class StationLocator():
         
         return network
     
+    def score(self, 
+              candidate: list, 
+              networks: MultiLineString, 
+              weights: list) -> float:
+        
+        max_distance = 250 # maximum distance to consider for roads
+        proximity_weight = 2 # weight for proximity score
+        traffic_weight = 10 # weight for traffic score
+        score = 0
+        
+        for i, network in enumerate(networks.geoms[:4695]):
+            distance = candidate.distance(network)
+            
+            # Only consider roads within 0-50 km range
+            if distance <= 75:
+                proximity_score = (max_distance - distance) / max_distance
+            elif distance <= max_distance:
+                proximity_score = (max_distance - distance) / max_distance / 2
+            else:
+                continue # skip roads beyond 150 km range
+            
+            traffic_score = 1 / (weights[i] + 1) ** 2
+            
+            score += proximity_weight * proximity_score + traffic_weight * traffic_score
+        
+        return score
+    
     def grid_searcher(self,
                       grid_size: int = 100_000,
                       num_locations: int = 10) -> list:
@@ -48,9 +75,10 @@ class StationLocator():
         weights = [float(tv) / sum(self.traffic_values) for tv in self.traffic_values]
         
         # computing the weighted distances in each grid. Not finished, the network size is larger than the weight size and will need to be adjusted
-        weighted_distances = [sum([((1/(weights[i] + 1)) ** 100) * candidate.distance(network) for i, network in enumerate(network.geoms[0:4695])]) for candidate in tqdm(candidate_locations)]
+        weighted_distances  = [self.score(candidate, network, weights) for candidate in tqdm(candidate_locations)]
+            
 
-        sorted_locations = sorted(zip(candidate_locations, weighted_distances), key=lambda x: x[1])[:num_locations]
+        sorted_locations = sorted(zip(candidate_locations, weighted_distances), key=lambda x: x[1], reverse=True)[:num_locations]
         
         return sorted_locations
     
@@ -76,4 +104,3 @@ class StationLocator():
         grid.add_to(m)
         
         m.save('map.html')
-        
