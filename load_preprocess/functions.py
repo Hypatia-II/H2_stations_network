@@ -67,7 +67,8 @@ class Data():
         
         return df
     
-    def create_df(self,
+    @classmethod
+    def create_df(cls,
                   highways_only: bool = False) -> pd.DataFrame:
         """Create the initial dataframe and calculate road density
 
@@ -77,7 +78,7 @@ class Data():
         Returns:
             pd.DataFrame: _description_
         """
-        shapefiles = self.get_shapefiles()
-        df = self.calculate_road_density(shapefiles, highways_only = highways_only)
+        shapefiles = cls.get_shapefiles()
+        df = cls.calculate_road_density(shapefiles, highways_only = highways_only)
         
         return df
