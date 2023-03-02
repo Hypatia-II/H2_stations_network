@@ -64,6 +64,8 @@ class Data():
         regions['road_density'] = regions['length_m'] / regions['area_m']
         
         df = regions[['NAME_1', 'road_density', 'length_m', 'area_m', 'length_max', 'length_mean']].sort_values(by='road_density', ascending=False)
+        df.rename(columns={"NAME_1":"region"}, inplace=True)
+
         
         return df
     
@@ -72,10 +74,10 @@ class Data():
         """Create the initial dataframe and calculate road density
 
         Args:
-            highways_only (bool, optional): _description_. Defaults to False.
+            highways_only: boolean to know whether limit calculation on highways only or include other roads
 
         Returns:
-            pd.DataFrame: _description_
+            pd.DataFrame: dataframe combining road densities to max, min and total road length
         """
         shapefiles = self.get_shapefiles()
         df = self.calculate_road_density(shapefiles, highways_only = highways_only)
