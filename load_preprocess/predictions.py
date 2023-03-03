@@ -15,15 +15,23 @@ class Number_Stations():
     def __init__(self, 
                  df_data: pd.DataFrame, 
                  path_conf: str = '../params/config.json', 
-                 length_to_use: str ='longest_line') -> None:
+                 length_to_use: str ='longest_line',
+                 scenario: str="scenario1") -> None:
         self.conf = json.load(open(path_conf, "r"))
-        self.autonomy_high_ms = self.conf['market_share'][0]/sum(self.conf['market_share'])
-        self.autonomy_medium_ms = self.conf['market_share'][1]/sum(self.conf['market_share'])
-        self.autonomy_low_ms = self.conf['market_share'][2]/sum(self.conf['market_share'])
+        self.scenario = scenario
+        self.autonomy_high_ms = self.conf[scenario]['market_share'][0]
+        self.autonomy_medium_ms = self.conf[scenario]['market_share'][1]
+        self.autonomy_low_ms = self.conf[scenario]['market_share'][2]
+        self.demand_share_2030 = self.conf[scenario]['demand_share_2030']
+        self.demand_share_2040 = self.conf[scenario]['demand_share_2040']
+        self.perc_dist_mid = self.conf[scenario]['perc_distance'][0]
+        self.perc_dist_low = self.conf[scenario]['perc_distance'][1]
         self.autonomy_high_km = self.conf['autonomy_share'][0]
         self.autonomy_medium_km = self.conf['autonomy_share'][1]
         self.autonomy_low_km = self.conf['autonomy_share'][2]
         self.df_data = df_data
+        self.truck_tank_size = self.conf["truck_tank_size"]
+        self.station_tank_size = self.conf["station_tank_size"]
         
         if (length_to_use not in ['longest_line', 'diameter', 'length_max']):
             length_to_use = 'longest_line'
@@ -127,16 +135,17 @@ class Number_Stations():
             year = 2030
             
         if year==2030:
-            H2_trucks_num = self.conf['H2_trucks_2030']
+            H2_trucks_num = self.conf['H2_trucks_2030']*self.demand_share_2030
         else:
-            H2_trucks_num = self.conf['H2_trucks_2040']
+            H2_trucks_num = self.conf['H2_trucks_2040']*self.demand_share_2040
             
         df["h2_num_"+str(year)] = H2_trucks_num*df["perc_load"]
         df["R_"+str(year)+"_high_aut"] = self.autonomy_high_ms*df["h2_num_"+str(year)]*df["avg_distance_high_aut"] / self.autonomy_high_km
-        df["R_"+str(year)+"_mid_aut"] = self.autonomy_medium_ms*df["h2_num_"+str(year)]*df["avg_distance_midlow_aut"] / self.autonomy_medium_km
-        df["R_"+str(year)+"_low_aut"] = self.autonomy_low_ms*df["h2_num_"+str(year)]*df["avg_distance_midlow_aut"] / self.autonomy_low_km
+        df["R_"+str(year)+"_mid_aut"] = self.autonomy_medium_ms*df["h2_num_"+str(year)]*df["avg_distance_mid_aut"] / self.autonomy_medium_km
+        df["R_"+str(year)+"_low_aut"] = self.autonomy_low_ms*df["h2_num_"+str(year)]*df["avg_distance_low_aut"] / self.autonomy_low_km
         df["R_"+str(year)+"_total"] = df["R_"+str(year)+"_high_aut"] + df["R_"+str(year)+"_mid_aut"] + df["R_"+str(year)+"_low_aut"]
-        df["C_"+str(year)] = self.conf['open_time'] / self.conf['avg_time_fill']
+        capacity = min(np.sum(self.station_tank_size)*1000/np.sum(self.truck_tank_size), self.conf['open_time'] / self.conf['avg_time_fill'])
+        df["C_"+str(year)] = capacity
         
         return df
         
@@ -174,7 +183,8 @@ class Number_Stations():
         df["max_length_drive"] = self.conf['max_hours_drive'] * self.conf['avg_speed_kmh']
         df[["length_max", "length_mean", "diameter", "longest_line"]] = df[["length_max", "length_mean", "diameter", "longest_line"]]/1e3
         df["avg_distance_high_aut"] = df[["max_length_drive", self.length_to_use]].min(axis=1) # This would be updated either by diameter or longest point
-        df["avg_distance_midlow_aut"] = 0.6*df["avg_distance_high_aut"]#df_new[["max_length_drive", "length_mean"]].min(axis=1)
+        df["avg_distance_mid_aut"] = self.perc_dist_mid*df["avg_distance_high_aut"]
+        df["avg_distance_low_aut"] = self.perc_dist_low*df["avg_distance_high_aut"]
         
         df = self.calculate_trucks_stations_peryear(df, year=2030)
         df = self.calculate_trucks_stations_peryear(df, year=2040)
@@ -200,3 +210,15 @@ class Number_Stations():
         df_new = self.calculate_number_stations(df_new)
         
         return df_new
+
+    def get_scenario_output(self, df):
+        """Print the outputs for the scenario.
+        """
+        num_stations_2030 = df["num_stations_2030"].sum()
+        num_stations_2040 = df["num_stations_2040"].sum()
+        print(f"The output for {self.scenario} is {num_stations_2030} for 2030 and {num_stations_2040} for 2040.")
+        for region in df["region"].values:
+            num_station_2030 = df[df.region==region]["num_stations_2030"].values[0]
+            num_station_2040 = df[df.region==region]["num_stations_2040"].values[0]
+            print(f"Region {region}: {num_station_2030} stations for 2030 and {num_station_2040} for 2040")
+        return None
