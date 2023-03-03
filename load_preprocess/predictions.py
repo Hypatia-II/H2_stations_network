@@ -85,6 +85,17 @@ class Number_Stations():
                       path: str, 
                       df_on: pd.DataFrame, 
                       df_off: pd.DataFrame) -> pd.DataFrame:
+        """
+        Merge freight dataframes with the dataframe about the region's dimensions
+
+        Args:
+            path : path to the region specific dataframe
+            df_on : onloading dataframe
+            df_off : offloading dataframe
+
+        Returns:
+            df_fr: updated and merged dataframe with all port actions per year and per region, to the original dataframe
+        """
         df_onload_fr = self.clean_freight_df(df_on, on_load=True)
         df_offload_fr = self.clean_freight_df(df_off, on_load=False)
 
@@ -102,7 +113,16 @@ class Number_Stations():
     def calculate_trucks_stations_peryear(self, 
                                           df: pd.DataFrame, 
                                           year: int = 2030) -> pd.DataFrame:
-        
+        """
+        Function to calculate the number of trucks needed per region and truck manufacturer based on the year
+
+        Args:
+            df : dataframe containing region specific variables regarding roads and traffic
+            year : the year to perform the estimation on
+
+        Returns:
+            df: updated dataframe with the number of trucks and the number of refills needed per manufacturer
+        """
         if (year not in [2030, 2040]):
             year = 2030
             
@@ -123,7 +143,16 @@ class Number_Stations():
     @staticmethod
     def calculate_stations(df: pd.DataFrame, 
                            year: int = 2030) -> pd.DataFrame:
-        
+        """
+        Calculate number of stations based on the year and the number of refills needed per region
+
+        Args:
+            df : dataframe containing the number of refills needed per region
+            year : the year to perform the estimation on
+
+        Returns:
+            df: updated dataframe with calculated number of stations needed
+        """
         if (year not in [2030, 2040]):
             year = 2030
             
@@ -133,7 +162,15 @@ class Number_Stations():
 
     def calculate_number_stations(self, 
                                   df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Estimate the number of stations from the number of trucks present
 
+        Args:
+            df: dataframe containing region specific variables regarding roads and traffic
+
+        Returns:
+            df: updated dataframe with total number of stations needed per region
+        """
         df["max_length_drive"] = self.conf['max_hours_drive'] * self.conf['avg_speed_kmh']
         df[["length_max", "length_mean", "diameter", "longest_line"]] = df[["length_max", "length_mean", "diameter", "longest_line"]]/1e3
         df["avg_distance_high_aut"] = df[["max_length_drive", self.length_to_use]].min(axis=1) # This would be updated either by diameter or longest point
@@ -148,7 +185,12 @@ class Number_Stations():
         return df
     
     def final_station_calculation(self) -> pd.DataFrame:
-        
+        """
+        Combine all functions to create the new dataframe with the estimated number of refill stations
+
+        Returns:
+            df_new: final dataframe with all needed metrics calculated
+        """
         df_on = pd.read_excel(self.conf['path_on_freight'], sheet_name='Sheet 1', skiprows=8)
         df_off = pd.read_excel(self.conf['path_off_freight'], sheet_name='Sheet 1', skiprows=8)
 
