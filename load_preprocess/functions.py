@@ -35,6 +35,25 @@ class Data():
             
         return shapes
     
+    def get_csvs(self) -> dict:
+        """
+        Load all .csv files in folder to geopandas dataframes
+        
+        Args:
+            path: the folder they are located in
+            
+        Returns:
+            shapes: dict with all csv dataframes
+        """
+        
+        csvs = glob.glob(self.path + '*.csv')
+        files = {}
+        for file in tqdm(csvs):
+            name = file.split('/')[-1].split('\\')[-1].split('.')[0]
+            files[name] = pd.read_csv(file, sep=None)
+        
+        return files
+    
     def calculate_max_length(self, 
                              g: shapely.geometry) -> float:
         """
