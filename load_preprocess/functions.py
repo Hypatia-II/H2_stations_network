@@ -2,9 +2,18 @@ import geopandas as gpd
 import glob
 import pandas as pd
 from tqdm import tqdm
+import numpy as np
+from scipy import spatial
+import shapely
+from shapely.geometry import LineString, mapping
+from itertools import combinations
+import re
+from scipy import spatial
+
 
 class Data():
-    def __init__(self, path: str = '../data/') -> None:
+    def __init__(self, 
+                 path: str = '../data/') -> None:
         self.path = path
     
     def get_shapefiles(self) -> dict:
@@ -26,6 +35,50 @@ class Data():
             
         return shapes
     
+    def calculate_max_length(self, 
+                             g: shapely.geometry) -> float:
+        """
+        Calculate the longest length in a polygon
+
+        Args:
+            g (shapely.geometry): geometry of a polygon
+
+        Returns:
+            longest_line: the longest distance calculated
+        """
+        all_coords = str(mapping(g)["coordinates"]) #https://gis.stackexchange.com/questions/287306/list-all-polygon-vertices-coordinates-using-geopandas
+        all_xys = re.findall("\d+\.\d+", all_coords) #I know this is ugly, but it works in extracting floats from nested tuples
+        all_xys = [float(c) for c in all_xys]
+        all_xys = np.array([[a,b] for a,b in zip(all_xys[::2], all_xys[1::2])])
+        candidates = all_xys[spatial.ConvexHull(all_xys).vertices]
+        dist_mat = spatial.distance_matrix(candidates, candidates)
+        i, j = np.unravel_index(dist_mat.argmax(), dist_mat.shape)
+        longest_line = LineString([(float(candidates[i][0]),float(candidates[i][1])), (float(candidates[j][0]),float(candidates[j][1]))]).length
+        
+        return longest_line
+    
+    def calculate_length_all(self,
+                             g: shapely.geometry) -> float:
+        """
+        Execute the longest length calculation per polygon, and taking the longest length from all polygons of a multigon
+
+        Args:
+            g (shapely.geometry): geometry of a polygon
+
+        Returns:
+            float: the longest distance calculated
+        """
+        max_v = 0
+        if g.geom_type == 'MultiPolygon':
+            gg = list(g.geoms)
+            for i in range(len(gg)):
+                gg_v = self.calculate_max_length(gg[i])
+                max_v = max(float(max_v), float(gg_v))
+        elif g.geom_type == 'Polygon':
+            max_v = self.calculate_max_length(g)
+            
+        return max_v
+
     def calculate_road_density(self,
                                shapefiles: dict,
                                highways_only: bool = True) -> pd.DataFrame:
@@ -46,6 +99,7 @@ class Data():
         regions = shapefiles['FRA_adm1']
         regions = regions.to_crs(epsg=2154)
         regions['area_m'] = regions.geometry.area
+        regions['longest_line'] = regions['geometry'].apply(self.calculate_length_all)
 
         joined = gpd.sjoin(routes, regions, predicate='within')
         joined['length_m'] = joined.geometry.length
@@ -62,8 +116,11 @@ class Data():
         
         regions = pd.merge(regions, temp_c, on='NAME_1', how='inner')
         regions['road_density'] = regions['length_m'] / regions['area_m']
+        regions['diameter'] = np.sqrt((regions['area_m'] / np.pi))*2
         
-        df = regions[['NAME_1', 'road_density', 'length_m', 'area_m', 'length_max', 'length_mean']].sort_values(by='road_density', ascending=False)
+        df = regions[['NAME_1', 'road_density', 'length_m', 'area_m', 'length_max', 'length_mean', 'diameter', 'longest_line']].sort_values(by='road_density', ascending=False)
+        df.rename(columns={"NAME_1":"region"}, inplace=True)
+
         
         return df
     
@@ -73,10 +130,10 @@ class Data():
         """Create the initial dataframe and calculate road density
 
         Args:
-            highways_only (bool, optional): _description_. Defaults to False.
+            highways_only: boolean to know whether limit calculation on highways only or include other roads
 
         Returns:
-            pd.DataFrame: _description_
+            pd.DataFrame: dataframe combining road densities to max, min and total road length
         """
         shapefiles = cls.get_shapefiles()
         df = cls.calculate_road_density(shapefiles, highways_only = highways_only)

@@ -1,13 +1,18 @@
 {
     "path_log": "params/logs.log",
-    "avg_speed": 80,
+    "path_region_dpt_map": "data/departements-region.csv",
+    "path_on_freight": "data/road_go_na_ru3g_spreadsheet.xlsx",
+    "path_off_freight": "data/road_go_na_rl3g_spreadsheet.xlsx",
+    
+    "avg_speed_kmh": 80,
     "max_hours_drive": 9,
-    "market_share": [0.14, 0.13, 0.12],
+    "H2_trucks_2030": 1e4,
+    "H2_trucks_2040": 6e4,
+    "avg_time_fill": 0.25,
+    "open_time": 24,
+
+    "market_share": [0.34, 0.13, 0.12],
     "autonomy_share": [1000, 150, 400],
     "tank_share": [80, 40, 32],
-    "market_share_trucks": ["VOLVO", "DAF", "IVECO"], 
-    "H": 24,
-    "time_fill_tank": 0.25,
-    "target_trucks_2030": 1e4,
-    "target_trucks_2040": 6e4
+    "market_share_trucks": ["VOLVO", "DAF", "IVECO"]
 }
