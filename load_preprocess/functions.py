@@ -4,6 +4,7 @@ import pandas as pd
 from tqdm import tqdm
 import numpy as np
 from scipy import spatial
+import shapely
 from shapely.geometry import LineString, mapping
 from itertools import combinations
 import re
@@ -11,7 +12,8 @@ from scipy import spatial
 
 
 class Data():
-    def __init__(self, path: str = '../data/') -> None:
+    def __init__(self, 
+                 path: str = '../data/') -> None:
         self.path = path
     
     def get_shapefiles(self) -> dict:
@@ -34,8 +36,16 @@ class Data():
         return shapes
     
     def calculate_max_length(self, 
-                             g):
+                             g: shapely.geometry) -> float:
+        """
+        Calculate the longest length in a polygon
 
+        Args:
+            g (shapely.geometry): geometry of a polygon
+
+        Returns:
+            longest_line: the longest distance calculated
+        """
         all_coords = str(mapping(g)["coordinates"]) #https://gis.stackexchange.com/questions/287306/list-all-polygon-vertices-coordinates-using-geopandas
         all_xys = re.findall("\d+\.\d+", all_coords) #I know this is ugly, but it works in extracting floats from nested tuples
         all_xys = [float(c) for c in all_xys]
@@ -48,8 +58,16 @@ class Data():
         return longest_line
     
     def calculate_length_all(self,
-                             g):
-        
+                             g: shapely.geometry) -> float:
+        """
+        Execute the longest length calculation per polygon, and taking the longest length from all polygons of a multigon
+
+        Args:
+            g (shapely.geometry): geometry of a polygon
+
+        Returns:
+            float: the longest distance calculated
+        """
         max_v = 0
         if g.geom_type == 'MultiPolygon':
             gg = list(g.geoms)

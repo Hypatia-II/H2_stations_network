@@ -10,18 +10,9 @@
     "H2_trucks_2040": 6e4,
     "avg_time_fill": 0.25,
     "open_time": 24,
-    
 
-    "market_share": [0.14, 0.12, 0.13],
-    "autonomy_share": [1000, 400, 150],
-    "tank_share": [80, 32, 40],
-    "market_share_trucks": ["VOLVO", "IVECO", "DAF"],
-
-    "autonomy_high_ms": 0.46,
-    "autonomy_medium_ms": 0.26,
-    "autonomy_low_ms": 0.28,
-    "autonomy_high_km": 1000,
-    "autonomy_medium_km": 400,
-    "autonomy_low_km": 150
-
+    "market_share": [0.34, 0.13, 0.12],
+    "autonomy_share": [1000, 150, 400],
+    "tank_share": [80, 40, 32],
+    "market_share_trucks": ["VOLVO", "DAF", "IVECO"]
 }
