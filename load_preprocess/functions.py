@@ -6,7 +6,6 @@ import numpy as np
 from scipy import spatial
 import shapely
 from shapely.geometry import LineString, mapping
-from itertools import combinations
 import re
 from scipy import spatial
 
@@ -50,7 +49,7 @@ class Data():
         files = {}
         for file in tqdm(csvs):
             name = file.split('/')[-1].split('\\')[-1].split('.')[0]
-            files[name] = pd.read_csv(file, sep=None)
+            files[name] = pd.read_csv(file, sep=None, engine='python')
         
         return files
     
