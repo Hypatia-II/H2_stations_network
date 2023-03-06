@@ -306,6 +306,82 @@ class Scenarios(StationLocator):
             
         return top_points_by_region
     
+    def nearest_part_of_linestrings(self, 
+                                    lines: list[object], 
+                                    point: Point) -> Point:
+        """Find nearest point of linestring or intersection to candidate location
+        
+        Args:
+            lines: road network
+            point: candidate location Point
+            
+        Returns:
+            nearest_line: new coordinates for nearest point of road to candidate location
+        """
+        
+        min_distance = float('inf')
+        nearest_line = None
+        for line in lines:
+            distance = line.distance(point)
+            if distance < min_distance:
+                min_distance = distance
+                nearest_line = line
+        
+        # check if there is an intersection within 3x the distance to the nearest road
+        intersection_distance = min_distance * 3
+        for line in lines:
+            if line == nearest_line:
+                continue
+            intersection = nearest_line.intersection(line)
+            if intersection.geom_type == 'Point':
+                intersection_distance_to_point = intersection.distance(point)
+                if intersection_distance_to_point <= intersection_distance:
+                    nearest_line = line
+                    min_distance = intersection_distance_to_point
+                    point = intersection
+                    intersection_distance = min_distance * 2
+        
+        min_distance = float('inf')
+        nearest_vertex = None
+        for i in range(len(nearest_line.coords)):
+            vertex = nearest_line.coords[i]
+            vertex_point = Point(vertex)
+            distance = vertex_point.distance(point)
+            if distance < min_distance:
+                min_distance = distance
+                nearest_vertex = i
+        return nearest_line.coords[nearest_vertex]
+
+    def fix_locations(self, 
+                      sorted_locations: list[object]) -> list[Point, int]:
+        """Attach location to nearest road or intersection
+        
+        Args:
+            sorted_locations: list of locations and weighted scores
+            
+        Returns:
+            new_points: adjusted Point locations and weighted scores
+        """
+    
+        if isinstance(sorted_locations, gpd.GeoDataFrame):
+            lines = self.road_segments
+            new_points = []
+            for i, j in tqdm(zip(sorted_locations[0].tolist(), sorted_locations[1].tolist()), total=sorted_locations.shape[0]):
+                best_point = self.nearest_part_of_linestrings(lines, i)
+                new_points.append([Point(best_point), j])
+
+        elif isinstance(sorted_locations, list):
+            lines = self.road_segments
+            new_points = []
+            for loc in tqdm(sorted_locations):
+                best_point = self.nearest_part_of_linestrings(loc[0], lines)
+                new_points.append([Point(best_point), loc[1]])
+    
+        else:
+            ValueError('Data must either be GeoDataFrame or list')
+            
+        return new_points
+    
     def visualize_scenarios(self,
                             sorted_locations_2030: list,
                             sorted_locations_2040: list, 
