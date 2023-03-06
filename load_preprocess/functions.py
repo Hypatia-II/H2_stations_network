@@ -53,6 +53,24 @@ class Data():
         
         return files
     
+    def get_jsons(self) -> dict:
+        """
+        Load all .json files in folder to dataframes
+        
+        Args:
+            path: the folder they are located in
+            
+        Returns:
+            shapes: dict with all json files
+        """
+        jsons = glob.glob(self.path + '*.json')
+        scen = {}
+        for file in tqdm(jsons):
+            name  = file.split('/')[-1].split('\\')[-1].split('.')[0]
+            scen[name] = pd.read_json(file, encoding='ISO-8859-1')
+            
+        return scen
+    
     def calculate_max_length(self, 
                              g: shapely.geometry) -> float:
         """
