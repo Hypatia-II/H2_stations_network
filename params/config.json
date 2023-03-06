@@ -1,8 +1,10 @@
 {
     "path_log": "params/logs.log",
+    "path_data": "data/",
     "path_region_dpt_map": "data/departements-region.csv",
     "path_on_freight": "data/road_go_na_ru3g_spreadsheet.xlsx",
     "path_off_freight": "data/road_go_na_rl3g_spreadsheet.xlsx",
+    
     
     "avg_speed_kmh": 80,
     "max_hours_drive": 9,
@@ -41,5 +43,12 @@
         "demand_share_2040": 1,
         "market_share": [0.33, 0.33, 0.33],
         "perc_distance": [0.6, 0.3]
+    },
+
+    "part_2": {
+        "road_weight": 1,
+        "traffic_weight": 10,
+        "logistic_weight": 5, 
+        "gas_station_weight": -2
     }
 }

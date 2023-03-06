@@ -36,6 +36,7 @@ class WeightedMultiLineString(MultiLineString):
     @property
     def weights(self):
         return [line.weight for line in self.lines]
+
 class StationLocator():
     def __init__(self,
                  shapefiles: dict,
@@ -76,9 +77,9 @@ class StationLocator():
                                             (self.air_logis['surface_totale'].max() - self.air_logis['surface_totale'].min())
         self.air_logis['geometry'] = self.air_logis.geometry.centroid
     
-    def create_network(self, 
-                               road_segments: list[object], 
-                               traffic_values: list[float]) -> MultiLineString:
+    def create_network(self,
+                       road_segments: list[object], 
+                       traffic_values: list[float]) -> MultiLineString:
         """Combine all geometric segments into one large MultiLineString with custom weights
         
         Args:
@@ -107,10 +108,10 @@ class StationLocator():
         network = ops.unary_union(segments)
         return network
 
-    def score_locations(self, 
-                       candidate: Point, 
-                       road_network: MultiLineString,
-                       gas_stations: bool = False) -> float:
+    def score_locations(self,
+                        candidate: Point, 
+                        road_network: MultiLineString,
+                        gas_stations: bool = False) -> float:
         
         """Compute score for candidate location
         
@@ -129,7 +130,7 @@ class StationLocator():
         proximity_weight = 2 # weight for proximity score
         traffic_weight = 5 # weight for traffic score
         aires_weight = 10 # weight for the aires logistique
-        station_weight = -2
+        station_weight = -2 # weight for gas stations
         score = 0
         
         # Calculating road distance & traffic 
