@@ -13,7 +13,7 @@ from scipy import spatial
 
 class Number_Stations():
     def __init__(self, 
-                 df_data: pd.DataFrame, 
+                 df_data: pd.DataFrame,
                  path_conf: str = '../params/config.json', 
                  length_to_use: str ='longest_line',
                  scenario: str="scenario1") -> None:
@@ -24,8 +24,8 @@ class Number_Stations():
         self.autonomy_low_ms = self.conf[scenario]['market_share'][2]
         self.demand_share_2030 = self.conf[scenario]['demand_share_2030']
         self.demand_share_2040 = self.conf[scenario]['demand_share_2040']
-        self.perc_dist_mid = self.conf[scenario]['perc_distance'][0]
-        self.perc_dist_low = self.conf[scenario]['perc_distance'][1]
+        self.perc_dist_mid = self.conf['perc_distance'][0]
+        self.perc_dist_low = self.conf['perc_distance'][1]
         self.autonomy_high_km = self.conf['autonomy_share'][0]
         self.autonomy_medium_km = self.conf['autonomy_share'][1]
         self.autonomy_low_km = self.conf['autonomy_share'][2]
@@ -210,6 +210,14 @@ class Number_Stations():
         df_new = self.calculate_number_stations(df_new)
         
         return df_new
+
+    def save_predictions(self, df):
+        """Save predictions by region in a json file as dict.
+        """
+        df_json = df[["region", "num_stations_2030", "num_stations_2040"]].set_index("region").to_dict()
+        with open('output/output_' + self.scenario + '.json', 'w+') as f:
+            json.dump(df_json, f, ensure_ascii=False)
+        return None
 
     def get_scenario_output(self, df):
         """Print the outputs for the scenario.

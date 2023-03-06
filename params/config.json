@@ -16,39 +16,29 @@
     "truck_tank_size": [80, 12, 32],
     "station_tank_size": [1, 2, 4],
     "market_share_trucks": ["VOLVO", "DAF", "IVECO"],
+    "perc_distance": [0.4, 0.15],
 
     "scenario1":{
         "demand_share_2030": 1,
-        "demand_share_2040": 1,
-        "market_share": [0.33, 0.33, 0.33],
-        "perc_distance": [0.5, 0.2]
+        "demand_share_2040": 0.83,
+        "market_share": [0.33, 0.33, 0.33]      
     },
 
     "scenario2":{
         "demand_share_2030": 0.6,
         "demand_share_2040": 0.8,
-        "market_share": [0.33, 0.33, 0.33],
-        "perc_distance": [0.5, 0.2]
+        "market_share": [0.33, 0.33, 0.33]
     },
 
     "scenario3":{
-        "demand_share_2030": 1,
-        "demand_share_2040": 1,
-        "market_share": [0.5, 0.5, 0],
-        "perc_distance": [0.5, 0.2]
+        "demand_share_2030": 1.5,
+        "demand_share_2040": 0.75,
+        "market_share": [0.33, 0.33, 0.33]
     },
 
     "scenario4":{
         "demand_share_2030": 1,
         "demand_share_2040": 1,
-        "market_share": [0.33, 0.33, 0.33],
-        "perc_distance": [0.6, 0.3]
-    },
-
-    "part_2": {
-        "road_weight": 1,
-        "traffic_weight": 10,
-        "logistic_weight": 5, 
-        "gas_station_weight": -2
+        "market_share": [0.6, 0.35, 0.05]
     }
 }
