@@ -1,8 +1,10 @@
 {
     "path_log": "params/logs.log",
+    "path_data": "data/",
     "path_region_dpt_map": "data/departements-region.csv",
     "path_on_freight": "data/road_go_na_ru3g_spreadsheet.xlsx",
     "path_off_freight": "data/road_go_na_rl3g_spreadsheet.xlsx",
+    
     
     "avg_speed_kmh": 80,
     "max_hours_drive": 9,
