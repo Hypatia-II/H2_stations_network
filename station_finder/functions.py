@@ -307,7 +307,7 @@ class Scenarios(StationLocator):
             
         return top_points_by_region
     
-    def merge_closest_points(top_locations: gpd.GeoDataFrame):
+    def merge_closest_points(self, top_locations: gpd.GeoDataFrame):
         """Merge close points into one station.
 
         Args:
@@ -427,7 +427,7 @@ class Scenarios(StationLocator):
             
         return new_points
     
-    def get_size_station(new_points: list[object]):
+    def get_size_station(self, new_points: list[object]):
         """Get the size of each station based on its score and number of merged stations.
         Args:
             new_points: list of locations, score and number of stations merged.
