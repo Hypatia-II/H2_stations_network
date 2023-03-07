@@ -62,7 +62,7 @@ class StationLocator():
         self.traffic_only = self.data.PL_traffic
 
         # Loading gas station data
-        self.stations = csvs['pdv'].dropna(subset='latlng')
+        self.stations = csvs['pdv'].dropna(subset=['latlng'])
         self.stations[['lat', 'long']] = self.stations['latlng'].str.split(',', expand=True).astype(float)
         self.stations['geometry'] = self.stations.apply(lambda row: Point(row['long'], row['lat']), axis=1)
         self.stations = gpd.GeoDataFrame(self.stations[['id', 'typeroute', 'services', 'geometry']]).set_crs(self.crs)
