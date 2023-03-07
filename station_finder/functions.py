@@ -6,6 +6,7 @@ from shapely.geometry import MultiLineString, Point, LineString
 from shapely import ops
 import pandas as pd
 from tqdm import tqdm
+from itertools import chain
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -68,8 +69,8 @@ class StationLocator():
         self.road_segments = self.data.geometry
         self.traffic_only = self.data.PL_traffic
 
-        ## Loading gas station data
-        self.stations = csvs['pdv'].dropna(subset='latlng')
+        # Loading gas station data
+        self.stations = csvs['pdv'].dropna(subset=['latlng'])
         self.stations[['lat', 'long']] = self.stations['latlng'].str.split(',', expand=True).astype(float)
         self.stations['geometry'] = self.stations.apply(lambda row: Point(row['long'], row['lat']), axis=1)
         self.stations = gpd.GeoDataFrame(self.stations[['id', 'typeroute', 'services', 'geometry']]).set_crs(self.crs)
@@ -306,6 +307,50 @@ class Scenarios(StationLocator):
             
         return top_points_by_region
     
+    def merge_closest_points(top_locations: gpd.GeoDataFrame):
+        """Merge close points into one station.
+
+        Args:
+            top_locations: geodataframe with top locations selected by model and their scores.
+        Returns:
+            polygones: final list of points with their score and number of merged points.
+        """
+        top_locations = list(zip(top_locations[0], top_locations[1]))
+        distances = {}
+        for i in range(len(top_locations)):
+            distances.setdefault(i, [])
+            for j in range(len(top_locations)):
+                if top_locations[i][0].distance(top_locations[j][0]) <= 10000:
+                    distance = top_locations[i][0].distance(top_locations[j][0])
+                    distances[i].append((top_locations[j][0].xy[0][0], top_locations[j][0].xy[1][0]))
+        
+        for key, values in distances.items():
+            distances[key] = (values, len(values))
+        
+        distances = {k:v[0] for k, v in sorted(distances.items(), key=lambda item: item[1][1], reverse=True)}
+
+        distances_reduced = {}
+        distances_val = {}
+        for i in range(len(distances)):
+            if set(distances[i]).isdisjoint(set(list(chain(*list(distances_val.values()))))):
+                distances_val[i] = distances[i]
+                distances_reduced[i] = [Point(xy) for xy in distances[i]]
+        
+        polygones = []
+        for key, values in distances_reduced.items():
+            if len(values) == 1:
+                point = values[0]
+            elif len(values) == 2:
+                line = LineString([values[0], values[1]])
+                point = line.centroid
+            else:
+                point = geometry.Polygon(values).centroid
+            avg_score = np.mean([item[1] for item in top_locations if item[0] in values])
+            #if not any(p.equals(point) for p, _ in polygones):
+            polygones.append((point, avg_score, len(values)))
+        
+        return polygones
+
     def nearest_part_of_linestrings(self, 
                                     lines: list[object], 
                                     point: Point) -> Point:
@@ -368,19 +413,41 @@ class Scenarios(StationLocator):
             new_points = []
             for i, j in tqdm(zip(sorted_locations[0].tolist(), sorted_locations[1].tolist()), total=sorted_locations.shape[0]):
                 best_point = self.nearest_part_of_linestrings(lines, i)
-                new_points.append([Point(best_point), j])
+                new_points.append([Point(best_point), j, 1])
 
         elif isinstance(sorted_locations, list):
             lines = self.road_segments
             new_points = []
             for loc in tqdm(sorted_locations):
-                best_point = self.nearest_part_of_linestrings(loc[0], lines)
-                new_points.append([Point(best_point), loc[1]])
+                best_point = self.nearest_part_of_linestrings(lines, loc[0])
+                new_points.append([Point(best_point), loc[1], loc[2]])
     
         else:
             ValueError('Data must either be GeoDataFrame or list')
             
         return new_points
+    
+    def get_size_station(new_points: list[object]):
+        """Get the size of each station based on its score and number of merged stations.
+        Args:
+            new_points: list of locations, score and number of stations merged.
+        Returns:
+            new_points: list of locations and size of station
+        """
+        thresholds = [
+            np.percentile([k*j for i, j, k in new_points], 50),
+            np.percentile([k*j for i, j, k in new_points], 75)
+            ]
+        final_points = []
+        for i in range(len(new_points)):
+            val = new_points[i][1]*new_points[i][2]
+            if val <= thresholds[0]:
+                final_points.append((new_points[i][0],"small"))
+            elif val <= thresholds[1]:
+                final_points.append((new_points[i][0],"medium"))
+            else:
+                final_points.append((new_points[i][0],"large"))
+        return final_points
     
     def visualize_scenarios(self,
                             sorted_locations_2030: list,
