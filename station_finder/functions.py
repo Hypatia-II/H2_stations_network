@@ -1,12 +1,14 @@
+from turtle import xcor
 import branca.colormap as cm
 import folium
 import geopandas as gpd
+from itertools import chain
 import numpy as np
-from shapely.geometry import MultiLineString, Point, LineString
+from shapely.geometry import MultiLineString, Point, LineString, Polygon
 from shapely import ops
 import pandas as pd
 from tqdm import tqdm
-from itertools import chain
+from typing import Optional
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -278,9 +280,11 @@ class StationLocator():
 class Scenarios(StationLocator):
     def __init__(self, 
                  shapefiles: dict, 
-                 csvs: dict, 
+                 csvs: dict,
+                 jsons: dict, 
                  crs: str = '2154') -> None:
         super().__init__(shapefiles, csvs, crs)
+        self.cost_profit = jsons['cost_profit']
 
     def distribute_locations(self, 
                              sorted_locations: list[object],
@@ -344,7 +348,7 @@ class Scenarios(StationLocator):
                 line = LineString([values[0], values[1]])
                 point = line.centroid
             else:
-                point = geometry.Polygon(values).centroid
+                point = Polygon(values).centroid
             avg_score = np.mean([item[1] for item in top_locations if item[0] in values])
             #if not any(p.equals(point) for p, _ in polygones):
             polygones.append((point, avg_score, len(values)))
@@ -411,9 +415,11 @@ class Scenarios(StationLocator):
         if isinstance(sorted_locations, gpd.GeoDataFrame):
             lines = self.road_segments
             new_points = []
-            for i, j in tqdm(zip(sorted_locations[0].tolist(), sorted_locations[1].tolist()), total=sorted_locations.shape[0]):
+            for i, j, k in tqdm(zip(sorted_locations[0].tolist(), 
+                                    sorted_locations[1].tolist(),
+                                    sorted_locations[2].tolist()), total=sorted_locations.shape[0]):
                 best_point = self.nearest_part_of_linestrings(lines, i)
-                new_points.append([Point(best_point), j, 1])
+                new_points.append([Point(best_point), j, k])
 
         elif isinstance(sorted_locations, list):
             lines = self.road_segments
@@ -423,11 +429,12 @@ class Scenarios(StationLocator):
                 new_points.append([Point(best_point), loc[1], loc[2]])
     
         else:
-            ValueError('Data must either be GeoDataFrame or list')
+            TypeError('Data must either be GeoDataFrame or list')
             
         return new_points
     
-    def get_size_station(self, new_points: list[object]):
+    def get_size_station(self, 
+                         new_points: list[object]):
         """Get the size of each station based on its score and number of merged stations.
         Args:
             new_points: list of locations, score and number of stations merged.
@@ -435,8 +442,8 @@ class Scenarios(StationLocator):
             new_points: list of locations and size of station
         """
         thresholds = [
-            np.percentile([k*j for i, j, k in new_points], 50),
-            np.percentile([k*j for i, j, k in new_points], 75)
+            np.percentile([k*j for _, j, k in new_points], 50),
+            np.percentile([k*j for _, j, k in new_points], 75)
             ]
         final_points = []
         for i in range(len(new_points)):
@@ -448,10 +455,29 @@ class Scenarios(StationLocator):
             else:
                 final_points.append((new_points[i][0],"large"))
         return final_points
+       
+    def calculate_cost(self,
+                       sorted_locations: list[object]) -> gpd.GeoDataFrame:
+        """Calculate costs per station in 2030, 2040
+        
+        Args:
+            sorted_locations: location data with size data
+            
+        Returns:
+            sorted_locations: dataframe with location, size, and costs in 2030 and 2040
+        """
+        sorted_locations = gpd.GeoDataFrame(sorted_locations, geometry=0).set_crs(self.crs)
+        
+        for i, row in tqdm(sorted_locations.iterrows(), total=sorted_locations.shape[0]):
+            cost_profit = self.cost_profit[row[1]]
+            sorted_locations.at[i, 'costs_2030'] = cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2030-(2023 + cost_profit['construction_time'])))
+            sorted_locations.at[i, 'costs_2040'] = 2 * cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2040-(2023 + cost_profit['construction_time'])))
+            
+        return sorted_locations
     
     def visualize_scenarios(self,
                             sorted_locations_2030: list,
-                            sorted_locations_2040: list, 
+                            sorted_locations_2040: Optional[list] = None, 
                             colors: list[str] = None, 
                             filename: str = 'map.html') -> None:
         
@@ -462,8 +488,7 @@ class Scenarios(StationLocator):
             sorted_locations_2040: station locations in 2040
             colors: list of colors for highways
             filename: name of file
-        """
-        
+        """       
         france_center = [46.2276, 2.2137]
         m = folium.Map(location=france_center, zoom_start=6, tiles='cartodbpositron')
 
@@ -485,22 +510,31 @@ class Scenarios(StationLocator):
                                  name='Routes',
                                  style_function=style_function
                                 )
-        top_2030 = folium.GeoJson(gpd.GeoDataFrame(sorted_locations_2030, geometry=0).set_crs(self.crs),
-                              marker = folium.CircleMarker(radius = 5, 
-                                           weight = 0, 
-                                           fill_color = 'blue', 
-                                           fill_opacity = 1)
-                              )
         
-        top_2040 = folium.GeoJson(gpd.GeoDataFrame(sorted_locations_2040, geometry=0).set_crs(self.crs),
-                              marker = folium.CircleMarker(radius = 3, 
-                                           weight = 0, 
-                                           fill_color = 'red', 
-                                           fill_opacity = 0.6)
-                              )
+        # hydrogen location dots
+        sorted_locations_2030 = gpd.GeoDataFrame(sorted_locations_2030, geometry=0).set_crs(self.crs)
+        top_2030 = folium.GeoJson(sorted_locations_2030,
+                                  marker = folium.CircleMarker(
+                                      radius = 5,
+                                      weight = 0,
+                                      fill_color = 'blue', 
+                                      fill_opacity = 0.6,)                                  
+                                  )
         
         roads.add_to(m)
         top_2030.add_to(m)
-        top_2040.add_to(m)
         
+        if sorted_locations_2040 is not None:
+            sorted_locations_2040 = gpd.GeoDataFrame(sorted_locations_2040, geometry=0).set_crs(self.crs)
+            top_2040 = folium.GeoJson(sorted_locations_2040,
+                                      marker = folium.CircleMarker(
+                                          radius = 3, 
+                                          weight = 0, 
+                                          fill_color = 'red',
+                                          fill_opacity = 1,)
+                                      )
+            top_2040.add_to(m)
+            
         m.save(filename)
+        
+
