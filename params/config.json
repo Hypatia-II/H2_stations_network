@@ -17,6 +17,9 @@
     "station_tank_size": [1, 2, 4],
     "market_share_trucks": ["VOLVO", "DAF", "IVECO"],
     "perc_distance": [0.4, 0.15],
+    "capacity_stations": [1000, 2000, 4000],
+    "profitability_stations": [0.9, 0.8, 0.6],
+    "grid_size": 10000,
 
     "scenario1":{
         "demand_share_2030": 1,

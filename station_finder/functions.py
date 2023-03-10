@@ -229,43 +229,53 @@ class StationLocator():
         sorted_locations = sorted(zip(candidate_locations, weighted_scores), key=lambda x: x[1], reverse=True)
         
         return sorted_locations
-    
-    def profit_loader_by_region(self, final_points: list[object], region_geom: gpd.GeoDataFrame, regions_dem: pd.Series):
-        region_geom = region_geom.set_index("NAME_1").to_dict()["geometry"]
-        regions_dem = regions_dem.to_dict()
-        stations_by_region = {}
-        for point in final_points:
-            not_found = True
-            while not_found:
-                for key, value in region_geom.items():
-                    stations_by_region.setdefault(key, [0, 0, 0])
-                    if point[0].within(value):
-                        not_found = False
-                        if point[1] == "small":
-                            stations_by_region[key][0] += 1
-                        elif point[1] == "medium":
-                            stations_by_region[key][1] += 1
-                        else:
-                            stations_by_region[key][2] += 1
-        
-        regions_capac ={key:(val[0]*1000 + val[1]*2000 + val[2]*4000, (0.9+0.8+0.6)/3) for key, val in stations_by_region.items() if val[0] + val[1] + val[2] >0}
-        # (val[0]*0.9 + val[1]*0.8 + val[2]*0.6)/(val[0] + val[1] + val[2])
 
-        load_profit_by_region = {}
+
+    def profitability_by_station(final_points: list[object], regions_dem: pd.Series, path_conf: str = 'params/config.json'):
+        """Compute the profitability of each station based on its attractiveness score and the demand.
+
+        Args:
+            final_points: list of stations' location, size and score
+            regions_dem: dictionnary of regions and their demand
+            path_conf: path of the config file
+        Returns:
+            stations_final: list of stations' location, size, score, load, profitability (%load) and profitability (binary)
+        
+        """
+
+        conf = json.load(open(path_conf, "r"))
+        capacity_stations = conf["capacity_stations"]
+        profitability_stations = conf["profitability_stations"]
+
+        regions_dem = regions_dem.to_dict()
+        demand_total = sum(regions_dem.values())
+        score_total = sum([score for i, j, score in final_points])
+
+        capacity_dict = {
+            "small": capacity_stations[0],
+            "medium": capacity_stations[1],
+            "large": capacity_stations[2]}
+        profitability_dict = {
+            "small": profitability_stations[0],
+            "medium": profitability_stations[1],
+            "large": profitability_stations[2]
+        }
+
+        stations_final = []
         count = 0
-        for key, value in regions_capac.items():
-            load_profit_by_region.setdefault(key, [0, 0])
-            if value[0] != 0:
-                load_profit_by_region[key][0] = regions_dem[key]/value[0]
-            else:
-                load_profit_by_region[key][0] = 0
-            if load_profit_by_region[key][0] >= value[1]:
-                load_profit_by_region[key][1] = 1
-                count += 1
-            else:
-                load_profit_by_region[key][1] = 0
-        print(f"{count/len(load_profit_by_region)} of regions are profitable")
-        return load_profit_by_region
+        for i in range(len(final_points)):
+            demand = final_points[i][2]/score_total*demand_total
+            capacity = capacity_dict[final_points[i][1]]
+            profitability_binary = demand/capacity>profitability_dict[final_points[i][1]]
+            count += profitability_binary
+            stations_final.append([
+                final_points[i][0], final_points[i][1],
+                final_points[i][2], demand, demand/capacity,
+                profitability_binary
+            ])
+
+        print(f"{count/len(stations_final)} of stations are profitable")   
+        return stations_final
     
     def visualize_results(self,
                           sorted_locations: list,
@@ -469,7 +479,7 @@ class Scenarios(StationLocator):
         Args:
             new_points: list of locations, score and number of stations merged.
         Returns:
-            new_points: list of locations and size of station
+            new_points: list of locations, size of station and score
         """
         thresholds = [
             np.percentile([k*j for i, j, k in new_points], 50),
