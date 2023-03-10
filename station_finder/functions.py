@@ -1,5 +1,6 @@
 import branca.colormap as cm
 import datetime
+import json
 import folium
 import geopandas as gpd
 from itertools import chain
@@ -147,9 +148,6 @@ class StationLocator():
         
         score = 0
         
-        candidate_buffer = candidate.buffer(10_000/2)
-        road_network = gpd.sjoin(road_network, candidate_buffer, how='inner')
-        
         # Calculating road distance & traffic 
         for i, network in enumerate(road_network):
             distance = candidate.distance(network)
@@ -235,58 +233,10 @@ class StationLocator():
         else:
             candidate_locations = [Point(x, y) for x, y in candidate_locations.geometry]
         
-        weighted_scores  = [self.score_locations(candidate, network) for candidate in tqdm(candidate_locations)]
-            
-        sorted_locations = sorted(zip(candidate_locations, weighted_scores, gas_stations=gas_stations), key=lambda x: x[1], reverse=True)
-        
+        weighted_scores  = [self.score_locations(candidate, network, gas_stations) for candidate in tqdm(candidate_locations)]
+
+        sorted_locations = sorted(zip(candidate_locations, weighted_scores), key=lambda x: x[1], reverse=True)
         return sorted_locations
-
-
-    def profitability_by_station(final_points: list[object], regions_dem: pd.Series, path_conf: str = 'params/config.json'):
-        """Compute the profitability of each station based on its attractiveness score and the demand.
-
-        Args:
-            final_points: list of stations' location, size and score
-            regions_dem: dictionnary of regions and their demand
-            path_conf: path of the config file
-        Returns:
-            stations_final: list of stations' location, size, score, load, profitability (%load) and profitability (binary)
-        
-        """
-
-        conf = json.load(open(path_conf, "r"))
-        capacity_stations = conf["capacity_stations"]
-        profitability_stations = conf["profitability_stations"]
-
-        regions_dem = regions_dem.to_dict()
-        demand_total = sum(regions_dem.values())
-        score_total = sum([score for i, j, score in final_points])
-
-        capacity_dict = {
-            "small": capacity_stations[0],
-            "medium": capacity_stations[1],
-            "large": capacity_stations[2]}
-        profitability_dict = {
-            "small": profitability_stations[0],
-            "medium": profitability_stations[1],
-            "large": profitability_stations[2]
-        }
-
-        stations_final = []
-        count = 0
-        for i in range(len(final_points)):
-            demand = final_points[i][2]/score_total*demand_total
-            capacity = capacity_dict[final_points[i][1]]
-            profitability_binary = demand/capacity>profitability_dict[final_points[i][1]]
-            count += profitability_binary
-            stations_final.append([
-                final_points[i][0], final_points[i][1],
-                final_points[i][2], demand, demand/capacity,
-                profitability_binary
-            ])
-
-        print(f"{count/len(stations_final)} of stations are profitable")   
-        return stations_final
     
     def visualize_results(self,
                           sorted_locations: list,
@@ -338,9 +288,11 @@ class Scenarios(StationLocator):
                  shapefiles: dict, 
                  csvs: dict,
                  jsons: dict, 
+                 path_conf: str = 'params/config.json',
                  crs: str = '2154') -> None:
         super().__init__(shapefiles, csvs, crs)
         self.cost_profit = jsons['cost_profit']
+        self.conf = json.load(open(path_conf, "r"))
 
     def distribute_locations(self, 
                              sorted_locations: list[object],
@@ -530,6 +482,50 @@ class Scenarios(StationLocator):
             sorted_locations.at[i, 'costs_2040'] = 2 * cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2040-(2023 + cost_profit['construction_time'])))
             
         return sorted_locations
+    
+    def profitability_by_station(self, final_points: list[object], regions_dem: pd.Series):
+        """Compute the profitability of each station based on its attractiveness score and the demand.
+
+        Args:
+            final_points: list of stations' location, size and score
+            regions_dem: dictionnary of regions and their demand
+            path_conf: path of the config file
+        Returns:
+            stations_final: list of stations' location, size, score, load, profitability (%load) and profitability (binary)
+        
+        """
+        capacity_stations = self.conf["capacity_stations"]
+        profitability_stations = self.conf["profitability_stations"]
+
+        regions_dem = regions_dem.to_dict()
+        demand_total = sum(regions_dem.values())
+        score_total = sum([score for i, j, score in final_points])
+
+        capacity_dict = {
+            "small": capacity_stations[0],
+            "medium": capacity_stations[1],
+            "large": capacity_stations[2]}
+        profitability_dict = {
+            "small": profitability_stations[0],
+            "medium": profitability_stations[1],
+            "large": profitability_stations[2]
+        }
+
+        stations_final = []
+        count = 0
+        for i in range(len(final_points)):
+            demand = final_points[i][2]/score_total*demand_total
+            capacity = capacity_dict[final_points[i][1]]
+            profitability_binary = demand/capacity>profitability_dict[final_points[i][1]]
+            count += profitability_binary
+            stations_final.append([
+                final_points[i][0], final_points[i][1],
+                final_points[i][2], demand, demand/capacity,
+                profitability_binary
+            ])
+
+        print(f"{count/len(stations_final)} of stations are profitable")   
+        return stations_final
     
     def visualize_scenarios(self,
                             sorted_locations_2030: list,
