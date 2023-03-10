@@ -1,12 +1,14 @@
 import branca.colormap as cm
+import datetime
 import folium
 import geopandas as gpd
+from itertools import chain
 import numpy as np
 from shapely.geometry import MultiLineString, Point, LineString, Polygon
 from shapely import ops
 import pandas as pd
 from tqdm import tqdm
-from itertools import chain
+from typing import Optional
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -145,6 +147,9 @@ class StationLocator():
         
         score = 0
         
+        candidate_buffer = candidate.buffer(10_000/2)
+        road_network = gpd.sjoin(road_network, candidate_buffer, how='inner')
+        
         # Calculating road distance & traffic 
         for i, network in enumerate(road_network):
             distance = candidate.distance(network)
@@ -202,7 +207,9 @@ class StationLocator():
         return score
     
     def get_best_location(self,
-                          grid_size: int = 100_000,) -> list:
+                          grid_size: int = 100_000,
+                          gas_stations: bool = False,
+                          candidate_locations: pd.DataFrame = None) -> list:
         
         """Identify top X locations on map based on pre-defined parameters
         
@@ -222,11 +229,15 @@ class StationLocator():
         
         # setting up the grid points
         grid_points = np.transpose([np.tile(x_coords, len(y_coords)), np.repeat(y_coords, len(x_coords))])
-        candidate_locations = [Point(x, y) for x, y in grid_points]
+        
+        if candidate_locations is None:
+            candidate_locations = [Point(x, y) for x, y in grid_points]
+        else:
+            candidate_locations = [Point(x, y) for x, y in candidate_locations.geometry]
         
         weighted_scores  = [self.score_locations(candidate, network) for candidate in tqdm(candidate_locations)]
             
-        sorted_locations = sorted(zip(candidate_locations, weighted_scores), key=lambda x: x[1], reverse=True)
+        sorted_locations = sorted(zip(candidate_locations, weighted_scores, gas_stations=gas_stations), key=lambda x: x[1], reverse=True)
         
         return sorted_locations
 
@@ -325,9 +336,11 @@ class StationLocator():
 class Scenarios(StationLocator):
     def __init__(self, 
                  shapefiles: dict, 
-                 csvs: dict, 
+                 csvs: dict,
+                 jsons: dict, 
                  crs: str = '2154') -> None:
         super().__init__(shapefiles, csvs, crs)
+        self.cost_profit = jsons['cost_profit']
 
     def distribute_locations(self, 
                              sorted_locations: list[object],
@@ -458,9 +471,11 @@ class Scenarios(StationLocator):
         if isinstance(sorted_locations, gpd.GeoDataFrame):
             lines = self.road_segments
             new_points = []
-            for i, j in tqdm(zip(sorted_locations[0].tolist(), sorted_locations[1].tolist()), total=sorted_locations.shape[0]):
+            for i, j, k in tqdm(zip(sorted_locations[0].tolist(), 
+                                    sorted_locations[1].tolist(),
+                                    sorted_locations[2].tolist()), total=sorted_locations.shape[0]):
                 best_point = self.nearest_part_of_linestrings(lines, i)
-                new_points.append([Point(best_point), j, 1])
+                new_points.append([Point(best_point), j, k])
 
         elif isinstance(sorted_locations, list):
             lines = self.road_segments
@@ -470,11 +485,12 @@ class Scenarios(StationLocator):
                 new_points.append([Point(best_point), loc[1], loc[2]])
     
         else:
-            ValueError('Data must either be GeoDataFrame or list')
+            TypeError('Data must either be GeoDataFrame or list')
             
         return new_points
     
-    def get_size_station(self, new_points: list[object]):
+    def get_size_station(self, 
+                         new_points: list[object]):
         """Get the size of each station based on its score and number of merged stations.
         Args:
             new_points: list of locations, score and number of stations merged.
@@ -482,8 +498,8 @@ class Scenarios(StationLocator):
             new_points: list of locations, size of station and score
         """
         thresholds = [
-            np.percentile([k*j for i, j, k in new_points], 50),
-            np.percentile([k*j for i, j, k in new_points], 75)
+            np.percentile([k*j for _, j, k in new_points], 50),
+            np.percentile([k*j for _, j, k in new_points], 75)
             ]
         final_points = []
         for i in range(len(new_points)):
@@ -495,10 +511,29 @@ class Scenarios(StationLocator):
             else:
                 final_points.append((new_points[i][0],"large", new_points[i][1]))
         return final_points
+       
+    def calculate_cost(self,
+                       sorted_locations: list[object]) -> gpd.GeoDataFrame:
+        """Calculate costs per station in 2030, 2040
+        
+        Args:
+            sorted_locations: location data with size data
+            
+        Returns:
+            sorted_locations: dataframe with location, size, and costs in 2030 and 2040
+        """
+        sorted_locations = gpd.GeoDataFrame(sorted_locations, geometry=0).set_crs(self.crs)
+        
+        for i, row in tqdm(sorted_locations.iterrows(), total=sorted_locations.shape[0]):
+            cost_profit = self.cost_profit[row[1]]
+            sorted_locations.at[i, 'costs_2030'] = cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2030-(2023 + cost_profit['construction_time'])))
+            sorted_locations.at[i, 'costs_2040'] = 2 * cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2040-(2023 + cost_profit['construction_time'])))
+            
+        return sorted_locations
     
     def visualize_scenarios(self,
                             sorted_locations_2030: list,
-                            sorted_locations_2040: list, 
+                            sorted_locations_2040: Optional[list] = None, 
                             colors: list[str] = None, 
                             filename: str = 'map.html') -> None:
         
@@ -509,8 +544,7 @@ class Scenarios(StationLocator):
             sorted_locations_2040: station locations in 2040
             colors: list of colors for highways
             filename: name of file
-        """
-        
+        """       
         france_center = [46.2276, 2.2137]
         m = folium.Map(location=france_center, zoom_start=6, tiles='cartodbpositron')
 
@@ -532,22 +566,85 @@ class Scenarios(StationLocator):
                                  name='Routes',
                                  style_function=style_function
                                 )
-        top_2030 = folium.GeoJson(gpd.GeoDataFrame(sorted_locations_2030, geometry=0).set_crs(self.crs),
-                              marker = folium.CircleMarker(radius = 5, 
-                                           weight = 0, 
-                                           fill_color = 'blue', 
-                                           fill_opacity = 1)
-                              )
         
-        top_2040 = folium.GeoJson(gpd.GeoDataFrame(sorted_locations_2040, geometry=0).set_crs(self.crs),
-                              marker = folium.CircleMarker(radius = 3, 
-                                           weight = 0, 
-                                           fill_color = 'red', 
-                                           fill_opacity = 0.6)
-                              )
+        # hydrogen location dots
+        sorted_locations_2030 = gpd.GeoDataFrame(sorted_locations_2030, geometry=0).set_crs(self.crs)
+        top_2030 = folium.GeoJson(sorted_locations_2030,
+                                  marker = folium.CircleMarker(
+                                      radius = 5,
+                                      weight = 0,
+                                      fill_color = 'blue', 
+                                      fill_opacity = 0.6,)                                  
+                                  )
         
         roads.add_to(m)
         top_2030.add_to(m)
-        top_2040.add_to(m)
         
+        if sorted_locations_2040 is not None:
+            sorted_locations_2040 = gpd.GeoDataFrame(sorted_locations_2040, geometry=0).set_crs(self.crs)
+            top_2040 = folium.GeoJson(sorted_locations_2040,
+                                      marker = folium.CircleMarker(
+                                          radius = 3, 
+                                          weight = 0, 
+                                          fill_color = 'red',
+                                          fill_opacity = 1,)
+                                      )
+            top_2040.add_to(m)
+            
         m.save(filename)
+
+class Case(StationLocator):
+    def __init__(self, shapefiles: dict, csvs: dict, jsons: dict, crs: str = '2154') -> None:
+        super().__init__(shapefiles, csvs, crs)
+        self.shapefiles = shapefiles
+        self.csvs = csvs
+        self.jsons = jsons
+        self.crs = crs
+        
+        # competitor stations
+        self.competitors = self.csvs['te_dv']
+        self.competitors[['lat', 'long']] = self.competitors['Coordinates'].str.split(',', expand=True).astype(float)
+        self.competitors['geometry'] = self.competitors.apply(lambda row: Point(row['long'], row['lat']), axis=1)
+        
+        #self.competitor_locations = super().get_best_location(candidate_locations=self.competitors)
+        
+    def recalculate_locations(self, fixed_locations) -> list[object, int]:
+        for point in tqdm(fixed_locations):
+            station_score = 0.0
+            station_weight = -50
+            max_distance = 60_000
+            for station in self.competitors.geometry:
+                distance = point[0].distance(station)
+                
+                if distance < max_distance/2:
+                    station_score = (max_distance - distance) / max_distance
+                elif distance <= max_distance:
+                    station_score = (max_distance - distance) / max_distance / 2
+                    
+                
+            point[1] += station_score * station_weight
+            
+        return fixed_locations
+    
+    def calculate_case3(self, 
+                        fixed_locations: list[object, int], 
+                        final_year: int = 2040):
+        
+
+        today = datetime.date.today()
+        years = final_year - today.year
+        
+        
+        
+    
+    
+                    
+            
+                    
+                
+                
+        
+        
+    
+        
+        
