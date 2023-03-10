@@ -1,5 +1,5 @@
-from turtle import xcor
 import branca.colormap as cm
+import datetime
 import folium
 import geopandas as gpd
 from itertools import chain
@@ -147,6 +147,9 @@ class StationLocator():
         
         score = 0
         
+        candidate_buffer = candidate.buffer(10_000/2)
+        road_network = gpd.sjoin(road_network, candidate_buffer, how='inner')
+        
         # Calculating road distance & traffic 
         for i, network in enumerate(road_network):
             distance = candidate.distance(network)
@@ -204,7 +207,9 @@ class StationLocator():
         return score
     
     def get_best_location(self,
-                          grid_size: int = 100_000,) -> list:
+                          grid_size: int = 100_000,
+                          gas_stations: bool = False,
+                          candidate_locations: pd.DataFrame = None) -> list:
         
         """Identify top X locations on map based on pre-defined parameters
         
@@ -224,11 +229,15 @@ class StationLocator():
         
         # setting up the grid points
         grid_points = np.transpose([np.tile(x_coords, len(y_coords)), np.repeat(y_coords, len(x_coords))])
-        candidate_locations = [Point(x, y) for x, y in grid_points]
+        
+        if candidate_locations is None:
+            candidate_locations = [Point(x, y) for x, y in grid_points]
+        else:
+            candidate_locations = [Point(x, y) for x, y in candidate_locations.geometry]
         
         weighted_scores  = [self.score_locations(candidate, network) for candidate in tqdm(candidate_locations)]
             
-        sorted_locations = sorted(zip(candidate_locations, weighted_scores), key=lambda x: x[1], reverse=True)
+        sorted_locations = sorted(zip(candidate_locations, weighted_scores, gas_stations=gas_stations), key=lambda x: x[1], reverse=True)
         
         return sorted_locations
     
@@ -536,5 +545,59 @@ class Scenarios(StationLocator):
             top_2040.add_to(m)
             
         m.save(filename)
+
+class Case(StationLocator):
+    def __init__(self, shapefiles: dict, csvs: dict, jsons: dict, crs: str = '2154') -> None:
+        super().__init__(shapefiles, csvs, crs)
+        self.shapefiles = shapefiles
+        self.csvs = csvs
+        self.jsons = jsons
+        self.crs = crs
+        
+        # competitor stations
+        self.competitors = self.csvs['te_dv']
+        self.competitors[['lat', 'long']] = self.competitors['Coordinates'].str.split(',', expand=True).astype(float)
+        self.competitors['geometry'] = self.competitors.apply(lambda row: Point(row['long'], row['lat']), axis=1)
+        
+        #self.competitor_locations = super().get_best_location(candidate_locations=self.competitors)
+        
+    def recalculate_locations(self, fixed_locations) -> list[object, int]:
+        for point in tqdm(fixed_locations):
+            station_score = 0.0
+            station_weight = -50
+            max_distance = 60_000
+            for station in self.competitors.geometry:
+                distance = point[0].distance(station)
+                
+                if distance < max_distance/2:
+                    station_score = (max_distance - distance) / max_distance
+                elif distance <= max_distance:
+                    station_score = (max_distance - distance) / max_distance / 2
+                    
+                
+            point[1] += station_score * station_weight
+            
+        return fixed_locations
+    
+    def calculate_case3(self, 
+                        fixed_locations: list[object, int], 
+                        final_year: int = 2040):
         
 
+        today = datetime.date.today()
+        years = final_year - today.year
+        
+        
+        
+    
+    
+                    
+            
+                    
+                
+                
+        
+        
+    
+        
+        
