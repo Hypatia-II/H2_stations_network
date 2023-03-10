@@ -2,7 +2,7 @@ import branca.colormap as cm
 import folium
 import geopandas as gpd
 import numpy as np
-from shapely.geometry import MultiLineString, Point, LineString
+from shapely.geometry import MultiLineString, Point, LineString, Polygon
 from shapely import ops
 import pandas as pd
 from tqdm import tqdm
@@ -230,6 +230,43 @@ class StationLocator():
         
         return sorted_locations
     
+    def profit_loader_by_region(self, final_points: list[object], region_geom: gpd.GeoDataFrame, regions_dem: pd.Series):
+        region_geom = region_geom.set_index("NAME_1").to_dict()["geometry"]
+        regions_dem = regions_dem.to_dict()
+        stations_by_region = {}
+        for point in final_points:
+            not_found = True
+            while not_found:
+                for key, value in region_geom.items():
+                    stations_by_region.setdefault(key, [0, 0, 0])
+                    if point[0].within(value):
+                        not_found = False
+                        if point[1] == "small":
+                            stations_by_region[key][0] += 1
+                        elif point[1] == "medium":
+                            stations_by_region[key][1] += 1
+                        else:
+                            stations_by_region[key][2] += 1
+        
+        regions_capac ={key:(val[0]*1000 + val[1]*2000 + val[2]*4000, (0.9+0.8+0.6)/3) for key, val in stations_by_region.items() if val[0] + val[1] + val[2] >0}
+        # (val[0]*0.9 + val[1]*0.8 + val[2]*0.6)/(val[0] + val[1] + val[2])
+
+        load_profit_by_region = {}
+        count = 0
+        for key, value in regions_capac.items():
+            load_profit_by_region.setdefault(key, [0, 0])
+            if value[0] != 0:
+                load_profit_by_region[key][0] = regions_dem[key]/value[0]
+            else:
+                load_profit_by_region[key][0] = 0
+            if load_profit_by_region[key][0] >= value[1]:
+                load_profit_by_region[key][1] = 1
+                count += 1
+            else:
+                load_profit_by_region[key][1] = 0
+        print(f"{count/len(load_profit_by_region)} of regions are profitable")
+        return load_profit_by_region
+    
     def visualize_results(self,
                           sorted_locations: list,
                           num_locations: int = 25,
@@ -307,7 +344,7 @@ class Scenarios(StationLocator):
             
         return top_points_by_region
     
-    def merge_closest_points(self, top_locations: gpd.GeoDataFrame):
+    def merge_closest_points(self, top_locations: gpd.GeoDataFrame, distance_min: int=10_000):
         """Merge close points into one station.
 
         Args:
@@ -320,7 +357,7 @@ class Scenarios(StationLocator):
         for i in range(len(top_locations)):
             distances.setdefault(i, [])
             for j in range(len(top_locations)):
-                if top_locations[i][0].distance(top_locations[j][0]) <= 10000:
+                if top_locations[i][0].distance(top_locations[j][0]) <= distance_min:
                     distance = top_locations[i][0].distance(top_locations[j][0])
                     distances[i].append((top_locations[j][0].xy[0][0], top_locations[j][0].xy[1][0]))
         
@@ -344,7 +381,7 @@ class Scenarios(StationLocator):
                 line = LineString([values[0], values[1]])
                 point = line.centroid
             else:
-                point = geometry.Polygon(values).centroid
+                point = Polygon(values).centroid
             avg_score = np.mean([item[1] for item in top_locations if item[0] in values])
             #if not any(p.equals(point) for p, _ in polygones):
             polygones.append((point, avg_score, len(values)))
@@ -442,11 +479,11 @@ class Scenarios(StationLocator):
         for i in range(len(new_points)):
             val = new_points[i][1]*new_points[i][2]
             if val <= thresholds[0]:
-                final_points.append((new_points[i][0],"small"))
+                final_points.append((new_points[i][0],"small", new_points[i][1]))
             elif val <= thresholds[1]:
-                final_points.append((new_points[i][0],"medium"))
+                final_points.append((new_points[i][0],"medium", new_points[i][1]))
             else:
-                final_points.append((new_points[i][0],"large"))
+                final_points.append((new_points[i][0],"large", new_points[i][1]))
         return final_points
     
     def visualize_scenarios(self,
