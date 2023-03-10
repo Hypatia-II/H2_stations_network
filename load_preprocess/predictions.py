@@ -215,7 +215,7 @@ class Number_Stations():
         """Save predictions by region in a json file as dict.
         """
         df_json = df[["region", "num_stations_2030", "num_stations_2040"]].set_index("region").to_dict()
-        with open('output/output_' + self.scenario + '.json', 'w+') as f:
+        with open('data/output_' + self.scenario + '.json', 'w+') as f:
             json.dump(df_json, f, ensure_ascii=False)
         return None
 
