@@ -1,5 +1,4 @@
 import branca.colormap as cm
-import datetime
 import json
 import folium
 import geopandas as gpd
@@ -8,6 +7,7 @@ import numpy as np
 from shapely.geometry import MultiLineString, Point, LineString, Polygon
 from shapely import ops
 import pandas as pd
+import pickle
 from tqdm import tqdm
 from typing import Optional
 
@@ -207,35 +207,41 @@ class StationLocator():
     def get_best_location(self,
                           grid_size: int = 100_000,
                           gas_stations: bool = False,
-                          candidate_locations: pd.DataFrame = None) -> list:
+                          candidate_locations: pd.DataFrame = None,
+                          save_file: bool = False) -> list:
         
         """Identify top X locations on map based on pre-defined parameters
         
         Args:
             grid_size = distance between points on map, in meters
-            num_locations = number of top locations to be returned
+            gas_stations = whether to include gas_stations into calculations
+            candidate_location = predefined locations to calculate scores for
             
         Returns:
             sorted_locations: coordinates, weighted_score of top X locations
         """
         network = self.create_network(self.road_segments, self.traffic_only)
 
-        # creating the boundary of our grid
-        xmin, ymin, xmax, ymax = network.bounds
-        x_coords = np.arange(xmin, xmax + grid_size, grid_size)
-        y_coords = np.arange(ymin, ymax + grid_size, grid_size)
-        
-        # setting up the grid points
-        grid_points = np.transpose([np.tile(x_coords, len(y_coords)), np.repeat(y_coords, len(x_coords))])
-        
         if candidate_locations is None:
+            # creating the boundary of our grid
+            xmin, ymin, xmax, ymax = network.bounds
+            x_coords = np.arange(xmin, xmax + grid_size, grid_size)
+            y_coords = np.arange(ymin, ymax + grid_size, grid_size)
+            
+            # setting up the grid points
+            grid_points = np.transpose([np.tile(x_coords, len(y_coords)), np.repeat(y_coords, len(x_coords))])
             candidate_locations = [Point(x, y) for x, y in grid_points]
         else:
-            candidate_locations = [Point(x, y) for x, y in candidate_locations.geometry]
+            candidate_locations = candidate_locations.geometry
         
-        weighted_scores  = [self.score_locations(candidate, network, gas_stations) for candidate in tqdm(candidate_locations)]
-
+        weighted_scores  = [self.score_locations(candidate, network, gas_stations=gas_stations) for candidate in tqdm(candidate_locations)]
+            
         sorted_locations = sorted(zip(candidate_locations, weighted_scores), key=lambda x: x[1], reverse=True)
+        
+        if save_file:
+            with open('sorted_locations.pkl', 'wb') as f:
+                pickle.dump(sorted_locations, f)
+                
         return sorted_locations
     
     def visualize_results(self,
@@ -589,9 +595,9 @@ class Scenarios(StationLocator):
             
         m.save(filename)
 
-class Case(StationLocator):
+class Case(Scenarios):
     def __init__(self, shapefiles: dict, csvs: dict, jsons: dict, crs: str = '2154') -> None:
-        super().__init__(shapefiles, csvs, crs)
+        super().__init__(shapefiles, csvs, jsons, crs)
         self.shapefiles = shapefiles
         self.csvs = csvs
         self.jsons = jsons
@@ -599,48 +605,98 @@ class Case(StationLocator):
         
         # competitor stations
         self.competitors = self.csvs['te_dv']
+        self.competitors['H2 Conversion'] = self.competitors['H2 Conversion'].fillna(0)
         self.competitors[['lat', 'long']] = self.competitors['Coordinates'].str.split(',', expand=True).astype(float)
         self.competitors['geometry'] = self.competitors.apply(lambda row: Point(row['long'], row['lat']), axis=1)
         
-        #self.competitor_locations = super().get_best_location(candidate_locations=self.competitors)
+        self.competitors_starting = self.competitors[self.competitors['H2 Conversion'] == 1]
+        competitors_remaining = self.competitors[self.competitors['H2 Conversion'] == 0]
         
-    def recalculate_locations(self, fixed_locations) -> list[object, int]:
-        for point in tqdm(fixed_locations):
+        total_gas_stations = super().get_best_location(candidate_locations=competitors_remaining[:30]) # for sake of computations
+        self.total_gas_stations = [list(t) for t in total_gas_stations]
+        
+    def recalculate_locations(self, 
+                              locations: list[object, int], 
+                              competitor_locations: list[object, int],
+                              max_distance: int) -> list[object, int]:
+        if type(locations[0]) == tuple:
+            locations = [list(t) for t in locations]
+        if type(competitor_locations) == list:
+            competitor_locations = gpd.GeoDataFrame(competitor_locations, geometry=0)
+
+        
+        for point in tqdm(locations):
             station_score = 0.0
             station_weight = -50
-            max_distance = 60_000
-            for station in self.competitors.geometry:
+            for station in competitor_locations.geometry:
                 distance = point[0].distance(station)
                 
                 if distance < max_distance/2:
                     station_score = (max_distance - distance) / max_distance
                 elif distance <= max_distance:
                     station_score = (max_distance - distance) / max_distance / 2
-                    
                 
             point[1] += station_score * station_weight
             
-        return fixed_locations
+        return locations
+    
+    def new_stations_per_region(self,
+                                scenario: pd.DataFrame):
+        
+        avg_increase = (scenario['num_stations_2040'] - scenario['num_stations_2030']) / 10
+
+        for i in range(9, 0, -1):
+            scenario[f'num_stations_203{i}'] = scenario['num_stations_2030'] + avg_increase * i
+            scenario[f'num_stations_203{i}'] = scenario[f'num_stations_203{i}'].round().astype(int)
+        for i in range(9, 0, -1):
+            scenario[f'num_stations_203{i}'] = (scenario[f'num_stations_203{i}'] - scenario[f'num_stations_203{i-1}'])
+        
+        scenario['num_stations_2040'] = scenario['num_stations_2040'] - scenario.drop(columns=['num_stations_2040']).sum(axis=1)
+ 
+        return scenario
     
     def calculate_case3(self, 
-                        fixed_locations: list[object, int], 
-                        final_year: int = 2040):
+                        scored_locations: list[object, int],
+                        scenario: pd.DataFrame,
+                        max_distance: int = 50_000,
+                        final_year: int = 2040,):
+        """Simulate scenario 3 for part 3
         
-
-        today = datetime.date.today()
-        years = final_year - today.year
-        
-        
-        
-    
-    
-                    
+        Args:
+            scored_locations:
+            scenario:
+            final_year:
             
-                    
-                
-                
+        Returns:
+            station_years: dict of new location per year
+            existing_locations: a combination of all
+        """
         
+        total_h2_stations = [[x, 0] for x in self.competitors_starting['geometry']]
         
-    
+        all_locations = self.recalculate_locations(scored_locations, self.competitors_starting, max_distance=max_distance)
+        locations_2030 = super().distribute_locations(all_locations, scenario['num_stations_2030'])
+        locations_2030 = [[x, y] for x, y in zip(locations_2030[0], locations_2030[1])]
+        locations_2040 = super().distribute_locations(all_locations, scenario['num_stations_2040'])
+        locations_2040 = [[x, y] for x, y in zip(locations_2040[0], locations_2040[1])]
+
+        scenario = self.new_stations_per_region(scenario=scenario)
         
+        stations_years = {}
+        existing_locations = locations_2030.copy()
+        stations_years[2030] = existing_locations
+        for year in range(2031, final_year+1):
+            new_stations_count = sum(scenario[f'num_stations_{year}'])
+            total_h2_stations.extend(self.total_gas_stations[:new_stations_count])
+            del self.total_gas_stations[:new_stations_count]
+            
+            remaining_locations = [sublist for sublist in locations_2040 if sublist not in existing_locations]
+            new_stations = self.recalculate_locations(remaining_locations, total_h2_stations, max_distance=max_distance)
+            new_stations = super().distribute_locations(new_stations, scenario[f'num_stations_{year}'])
+            new_stations = [[x, y] for x, y in zip(new_stations[0], new_stations[1])]
+            stations_years[year] = new_stations
+            existing_locations.extend(new_stations)
         
+        return stations_years
+            
+         
