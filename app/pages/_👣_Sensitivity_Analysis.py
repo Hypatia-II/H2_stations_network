@@ -195,7 +195,9 @@ df, H2_stations_2030, H2_stations_2040, delta1, delta2 = functions_st.calculate_
                                             truck_tank_size = truck_tank_size,
                                             station_tank_size = station_tank_size,
                                             H2_stations_2030=H2_stations_2030, 
-                                            H2_stations_2040=H2_stations_2040)
+                                            H2_stations_2040=H2_stations_2040,
+                                            delta1=delta1,
+                                            delta2=delta2)
 
 
 scenario_name_ex = 'scenario_name_ex'
@@ -222,8 +224,14 @@ col1, col2 = st.columns([2, 2])
 col1.subheader(":family: :green[by 2030]")
 col2.subheader(":clock1: :green[by 2040]")
 
-col1.metric("", H2_stations_2030, delta=int(delta1))
-col2.metric("", H2_stations_2040, delta=int(delta2), delta_color="inverse")
+if delta1!=None:
+    delta1 = int(delta1)
+    
+if delta2!=None:
+    delta2 = int(delta2)
+    
+col1.metric("", H2_stations_2030, delta=delta1)
+col2.metric("", H2_stations_2040, delta=delta2, delta_color="inverse")
 
 st.dataframe(df_show.style.highlight_max(color='#74CD67', axis=0).highlight_min(color = '#E57760', axis=0), use_container_width=True)
 

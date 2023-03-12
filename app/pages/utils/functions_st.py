@@ -114,7 +114,9 @@ def calculate_number_stations(df: pd.DataFrame,
                               truck_tank_size: list = truck_tank_size,
                               station_tank_size: list = station_tank_size,
                               H2_stations_2030: int = 0,
-                              H2_stations_2040: int = 0) -> pd.DataFrame:
+                              H2_stations_2040: int = 0,
+                              delta1 = None,
+                              delta2 = None) -> pd.DataFrame:
     """
     Estimate the number of stations from the number of trucks present
 
