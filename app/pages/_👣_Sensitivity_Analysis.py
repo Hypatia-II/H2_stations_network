@@ -93,9 +93,9 @@ selected_length = length_to_use[length_display.index(selected_length_display)]
 # calculate distance function
 
 # Autonomy Market Share
-autonomy_high_ms = int(conf[scenario]['market_share'][0])
-autonomy_medium_ms = int(conf[scenario]['market_share'][1])
-autonomy_low_ms = int(conf[scenario]['market_share'][2])
+autonomy_high_ms = float(conf[scenario]['market_share'][0])
+autonomy_medium_ms = float(conf[scenario]['market_share'][1])
+autonomy_low_ms = float(conf[scenario]['market_share'][2])
 
 autonomy_high_km = int(conf['autonomy_share'][0])
 autonomy_medium_km = int(conf['autonomy_share'][1])
@@ -112,11 +112,11 @@ with col3:
     
 col1, col2, col3 = st.columns(3)
 with col1:
-    autonomy_high_ms = st.number_input('Enter market share of first trucks', min_value=0, max_value=1, value=autonomy_high_ms)
+    autonomy_high_ms = st.number_input('Enter market share of first trucks', min_value=0.00, max_value=1.00, value=autonomy_high_ms)
 with col2:
-    autonomy_medium_ms = st.number_input('Enter market share of second trucks', min_value=0, max_value=1, value=autonomy_medium_ms)
+    autonomy_medium_ms = st.number_input('Enter market share of second trucks', min_value=0.00, max_value=1.00, value=autonomy_medium_ms)
 with col3:
-    autonomy_low_ms = st.number_input('Enter market share of third trucks', min_value=0, max_value=1, value=autonomy_low_ms)
+    autonomy_low_ms = st.number_input('Enter market share of third trucks', min_value=0.00, max_value=1.00, value=autonomy_low_ms)
 
 
 # Value entry & Selection
@@ -127,7 +127,7 @@ col1, col2 = st.columns(2)
 with col1:
     demand_share_2030 = st.slider('H2 Trucks Target 2030', min_value=0.0, max_value=3.0, value=demand_share_2030, step=0.01)
 with col2:
-    demand_share_2040 = st.slider('H2 Trucks Target 2030', min_value=0.0, max_value=3.0, value=demand_share_2040, step=0.01)
+    demand_share_2040 = st.slider('H2 Trucks Target 2040', min_value=0.0, max_value=3.0, value=demand_share_2040, step=0.01)
 
 # Value entry & Selection
 truck_tank_size_high = conf["truck_tank_size"][0]
@@ -151,11 +151,11 @@ station_tank_size_low = conf["station_tank_size"][2]
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    station_tank_size_high = st.slider('Number of rows to display', min_value=1, max_value=20, value=station_tank_size_high, step=1)
+    station_tank_size_high = st.slider('Select the tank size of the first trucks', min_value=1, max_value=20, value=station_tank_size_high, step=1)
 with col2:
-    station_tank_size_medium = st.slider('Number of rows to display', min_value=1, max_value=20, value=station_tank_size_medium, step=1)
+    station_tank_size_medium = st.slider('Select the tank size of the second trucks', min_value=1, max_value=20, value=station_tank_size_medium, step=1)
 with col3:
-    station_tank_size_low = st.slider('Number of rows to display', min_value=1, max_value=20, value=station_tank_size_low, step=1)
+    station_tank_size_low = st.slider('Select the tank size of the third trucks', min_value=1, max_value=20, value=station_tank_size_low, step=1)
 
 station_tank_size = [station_tank_size_high, station_tank_size_medium, station_tank_size_low]
 
@@ -186,7 +186,7 @@ with col2:
         functions_st.save_predictions(df, scenario_name)
         st.write('Predictions saved !')
         
-# st.dataframe(grouped.head(n_rows).style.highlight_max(color='#D8FAD9', axis=0).highlight_min(color = '#FAD8F9', axis=0), use_container_width=True)
+st.dataframe(df.style.highlight_max(color='#D8FAD9', axis=0).highlight_min(color = '#FAD8F9', axis=0), use_container_width=True)
 
 
 # col1, col2 = st.columns([2, 2])
