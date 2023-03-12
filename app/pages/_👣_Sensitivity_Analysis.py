@@ -21,8 +21,7 @@ import functions_st
 # print(sys.path)
 # import functions_st
 
-path_conf = '../params/config.json'
-scenario ="scenario1"
+path_conf = '../app/pages/utils/params/config_st.json'
 conf = json.load(open(path_conf, "r"))
 
 st.set_page_config(layout="wide", page_title="Sensitivity Analysis", page_icon=":compass:")
@@ -77,18 +76,25 @@ def load_data(path):
 ######################### DELTA #################################
 df = load_data("../data/df_st.csv")
 
+keys_l = list((conf.keys()))
+scenario_list = [ck for ck in keys_l if ck.startswith('scenario')]
+scenario = scenario_list[0]
+
+path_output_sc = '../data/output_' + scenario + '.json'
+conf_o_sc = json.load(open(path_output_sc, "r"))
+H2_stations_2030 = int(sum(conf_o_sc['num_stations_2030'].values()))
+H2_stations_2040 = int(sum(conf_o_sc['num_stations_2040'].values()))
+
+scenario = st.selectbox('Select department length calculation method:', scenario_list)
+
 # Dropdown
-length_to_use ='longest_line'
-if (length_to_use not in ['longest_line', 'diameter', 'length_max']):
-    length_to_use = 'longest_line'
-length_to_use = length_to_use
+selected_length ='longest_line'
 
-length_to_use = ['longest_line', 'diameter', 'length_max']
-length_display = ['Longest Line', 'Diameter', 'Length Max']
-
-## create a dropdown menu for the user to select the server name
-selected_length_display = st.selectbox('Select department length calculation method:', length_display)
-selected_length = length_to_use[length_display.index(selected_length_display)]
+# ## create a dropdown menu for the user to select the server name
+# length_to_use = ['longest_line', 'diameter', 'length_max']
+# length_display = ['Longest Line', 'Diameter', 'Length Max']
+# selected_length_display = st.selectbox('Select department length calculation method:', length_display)
+# selected_length = length_to_use[length_display.index(selected_length_display)]
 
 # calculate distance function
 
@@ -101,15 +107,16 @@ autonomy_high_km = int(conf['autonomy_share'][0])
 autonomy_medium_km = int(conf['autonomy_share'][1])
 autonomy_low_km = int(conf['autonomy_share'][2])
     
-# Autonomy km
-col1, col2, col3 = st.columns(3)
-with col1:
-    autonomy_high_km = st.number_input('Enter autonomy of first trucks', min_value=1, value=autonomy_high_km)
-with col2:
-    autonomy_medium_km = st.number_input('Enter autonomy of second trucks', min_value=1, value=autonomy_medium_km)
-with col3:
-    autonomy_low_km = st.number_input('Enter autonomy of third trucks', min_value=1, value=autonomy_low_km)
+# # Autonomy km
+# col1, col2, col3 = st.columns(3)
+# with col1:
+#     autonomy_high_km = st.number_input('Enter autonomy of first trucks', min_value=1, value=autonomy_high_km)
+# with col2:
+#     autonomy_medium_km = st.number_input('Enter autonomy of second trucks', min_value=1, value=autonomy_medium_km)
+# with col3:
+#     autonomy_low_km = st.number_input('Enter autonomy of third trucks', min_value=1, value=autonomy_low_km)
     
+# Market Share
 col1, col2, col3 = st.columns(3)
 with col1:
     autonomy_high_ms = st.number_input('Enter market share of first trucks', min_value=0.00, max_value=1.00, value=autonomy_high_ms)
@@ -118,6 +125,19 @@ with col2:
 with col3:
     autonomy_low_ms = st.number_input('Enter market share of third trucks', min_value=0.00, max_value=1.00, value=autonomy_low_ms)
 
+# Fix this part
+# if (autonomy_high_ms+autonomy_medium_ms+autonomy_low_ms)!=1.0:
+#     if (autonomy_high_ms+autonomy_medium_ms)>1:
+#         autonomy_medium_ms = 1 - autonomy_high_ms
+#     elif (autonomy_medium_ms+autonomy_low_ms)>1:
+#         autonomy_low_ms = 1 - autonomy_medium_ms
+#     elif (autonomy_high_ms+autonomy_low_ms)>1:
+#         autonomy_low_ms = 1 - autonomy_high_ms
+#     else:
+#         autonomy_low_ms = 1 - autonomy_high_ms - autonomy_medium_ms
+        
+if (autonomy_high_ms+autonomy_medium_ms+autonomy_low_ms)>1.0:
+    st.write('The sum of market shares exceeds 1!')
 
 # Value entry & Selection
 demand_share_2030 = float(conf[scenario]['demand_share_2030'])
@@ -134,13 +154,13 @@ truck_tank_size_high = conf["truck_tank_size"][0]
 truck_tank_size_medium = conf["truck_tank_size"][1]
 truck_tank_size_low = conf["truck_tank_size"][2]
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    truck_tank_size_high = st.slider('Tank size of first tank', min_value=1, max_value=200, value=truck_tank_size_high, step=1)
-with col2:
-    truck_tank_size_medium = st.slider('Tank size of second tank', min_value=1, max_value=200, value=truck_tank_size_medium, step=1)
-with col3:
-    truck_tank_size_low = st.slider('Tank size of third tank', min_value=1, max_value=200, value=truck_tank_size_low, step=1)
+# col1, col2, col3 = st.columns(3)
+# with col1:
+#     truck_tank_size_high = st.slider('Tank size of first tank', min_value=1, max_value=200, value=truck_tank_size_high, step=1)
+# with col2:
+#     truck_tank_size_medium = st.slider('Tank size of second tank', min_value=1, max_value=200, value=truck_tank_size_medium, step=1)
+# with col3:
+#     truck_tank_size_low = st.slider('Tank size of third tank', min_value=1, max_value=200, value=truck_tank_size_low, step=1)
 
 truck_tank_size = [truck_tank_size_high, truck_tank_size_medium, truck_tank_size_low]
 
@@ -149,18 +169,20 @@ station_tank_size_high = conf["station_tank_size"][0]
 station_tank_size_medium = conf["station_tank_size"][1]
 station_tank_size_low = conf["station_tank_size"][2]
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    station_tank_size_high = st.slider('Select the tank size of the first trucks', min_value=1, max_value=20, value=station_tank_size_high, step=1)
-with col2:
-    station_tank_size_medium = st.slider('Select the tank size of the second trucks', min_value=1, max_value=20, value=station_tank_size_medium, step=1)
-with col3:
-    station_tank_size_low = st.slider('Select the tank size of the third trucks', min_value=1, max_value=20, value=station_tank_size_low, step=1)
+# col1, col2, col3 = st.columns(3)
+# with col1:
+#     station_tank_size_high = st.slider('Select the tank size of the first small stations', min_value=1, max_value=20, value=station_tank_size_high, step=1)
+# with col2:
+#     station_tank_size_medium = st.slider('Select the tank size of the medium stations', min_value=1, max_value=20, value=station_tank_size_medium, step=1)
+# with col3:
+#     station_tank_size_low = st.slider('Select the tank size of the largest stations', min_value=1, max_value=20, value=station_tank_size_low, step=1)
 
 station_tank_size = [station_tank_size_high, station_tank_size_medium, station_tank_size_low]
 
+delta1 = None
+delta2 = None
 
-df, H2_trucks_num_2030, H2_trucks_num_2040 = functions_st.calculate_number_stations(df, 
+df, H2_stations_2030, H2_stations_2040, delta1, delta2 = functions_st.calculate_number_stations(df, 
                                             selected_length,
                                             demand_share_2030 = demand_share_2030,
                                             demand_share_2040 = demand_share_2040,
@@ -171,43 +193,39 @@ df, H2_trucks_num_2030, H2_trucks_num_2040 = functions_st.calculate_number_stati
                                             autonomy_medium_km = autonomy_medium_km,
                                             autonomy_low_km = autonomy_low_km,
                                             truck_tank_size = truck_tank_size,
-                                            station_tank_size = station_tank_size)
+                                            station_tank_size = station_tank_size,
+                                            H2_stations_2030=H2_stations_2030, 
+                                            H2_stations_2040=H2_stations_2040)
 
-scenario_name = 'scenario_name_ex'
+
+scenario_name_ex = 'scenario_name_ex'
 
 col1, col2 = st.columns(2)
 with col1:
     if st.button('Save Scenario'):
-        scenario_name = st.text_input('Enter the name to save: ', 'scenario_ex')
+        scenario_name = st.text_input('Enter the name to save: ', scenario_name_ex)
         functions_st.save_scenario(df, scenario_name)
         st.write(('Scenario saved as ' + scenario_name))
 with col2:
     if st.button('Save Predictions'):
         functions_st.save_predictions(df, scenario_name)
         st.write('Predictions saved !')
-        
-st.dataframe(df.style.highlight_max(color='#D8FAD9', axis=0).highlight_min(color = '#FAD8F9', axis=0), use_container_width=True)
 
+cols_keep = ['region', 'R_2030_total', 'R_2040_total', 'h2_num_2030', 'h2_num_2040', 'num_stations_2030', 'num_stations_2040']
+cols_show = ['Region', 'Refills 2030', 'Refills 2040', 'H2 Trucks 2030', 'H2 Trucks 2040', 'Number of Stations 2030', 'Number of Stations 2040']
+df_show = df[cols_keep]
+df_show.sort_values(by='num_stations_2040', ascending=False, inplace=True)
+df_show.columns = cols_show
+df_show.set_index('Region', drop=True, inplace=True)
 
-# col1, col2 = st.columns([2, 2])
-# col1.subheader(":family: :green[Total number of visitors]")
-# col2.subheader(':clock1: :green[Average Waiting Times] _(in minutes)_')
+col1, col2 = st.columns([2, 2])
+col1.subheader(":family: :green[by 2030]")
+col2.subheader(":clock1: :green[by 2040]")
 
-# avg_wait_time = functions_st.calculate_metrics(df, selected_year, selected_month, selected_day)[0]
-# capacity_utilization = functions_st.calculate_metrics(df, selected_year, selected_month, selected_day)[1]
-# avg_adjust_capacity_utilization = functions_st.calculate_metrics(df, selected_year, selected_month, selected_day)[2]
-# sum_attendance = functions_st.calculate_metrics(df, selected_year, selected_month, selected_day)[3]
+col1.metric("", H2_stations_2030, delta=int(delta1))
+col2.metric("", H2_stations_2040, delta=int(delta2), delta_color="inverse")
 
-# delta = None
-# delta1 = None
-# delta2 = None
-# delta3 = None
-
-# delta = functions_st.calculate_delta(df, selected_year, selected_month, selected_day, avg_wait_time, capacity_utilization, avg_adjust_capacity_utilization, sum_attendance, delta, delta1, delta2, delta3)[0]
-# delta3 = functions_st.calculate_delta(df, selected_year, selected_month, selected_day, avg_wait_time, capacity_utilization, avg_adjust_capacity_utilization, sum_attendance, delta, delta1, delta2, delta3)[3]
-
-# col1.metric("", "{:,.0f}".format(sum_attendance), delta= delta3)
-# col2.metric("" , round(avg_wait_time, 2), delta=delta, delta_color="inverse")
+st.dataframe(df_show.style.highlight_max(color='#74CD67', axis=0).highlight_min(color = '#E57760', axis=0), use_container_width=True)
 
 # ################################################### WAITING TIMES ###################################################
 
