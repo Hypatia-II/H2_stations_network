@@ -84,9 +84,12 @@ if (length_to_use not in ['longest_line', 'diameter', 'length_max']):
 length_to_use = length_to_use
 
 length_to_use = ['longest_line', 'diameter', 'length_max']
+length_display = ['Longest Line', 'Diameter', 'Length Max']
 
 ## create a dropdown menu for the user to select the server name
-selected_length = st.selectbox('Select department length calculation method:', length_to_use)
+selected_length_display = st.selectbox('Select department length calculation method:', length_display)
+selected_length = length_to_use[length_display.index(selected_length_display)]
+
 # calculate distance function
 
 # Autonomy Market Share
@@ -97,14 +100,6 @@ autonomy_low_ms = int(conf[scenario]['market_share'][2])
 autonomy_high_km = int(conf['autonomy_share'][0])
 autonomy_medium_km = int(conf['autonomy_share'][1])
 autonomy_low_km = int(conf['autonomy_share'][2])
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    autonomy_high_ms = st.number_input('Enter market share of first trucks', min_value=0, max_value=1, value=autonomy_high_ms)
-with col2:
-    autonomy_medium_ms = st.number_input('Enter market share of second trucks', min_value=0, max_value=1, value=autonomy_medium_ms)
-with col3:
-    autonomy_low_ms = st.number_input('Enter market share of third trucks', min_value=0, max_value=1, value=autonomy_low_ms)
     
 # Autonomy km
 col1, col2, col3 = st.columns(3)
@@ -114,6 +109,15 @@ with col2:
     autonomy_medium_km = st.number_input('Enter autonomy of second trucks', min_value=1, value=autonomy_medium_km)
 with col3:
     autonomy_low_km = st.number_input('Enter autonomy of third trucks', min_value=1, value=autonomy_low_km)
+    
+col1, col2, col3 = st.columns(3)
+with col1:
+    autonomy_high_ms = st.number_input('Enter market share of first trucks', min_value=0, max_value=1, value=autonomy_high_ms)
+with col2:
+    autonomy_medium_ms = st.number_input('Enter market share of second trucks', min_value=0, max_value=1, value=autonomy_medium_ms)
+with col3:
+    autonomy_low_ms = st.number_input('Enter market share of third trucks', min_value=0, max_value=1, value=autonomy_low_ms)
+
 
 # Value entry & Selection
 demand_share_2030 = float(conf[scenario]['demand_share_2030'])
@@ -132,11 +136,11 @@ truck_tank_size_low = conf["truck_tank_size"][2]
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    truck_tank_size_high = st.slider('Tank size of first tank', min_value=1, max_value=200, value=truck_tank_size_high, step=2)
+    truck_tank_size_high = st.slider('Tank size of first tank', min_value=1, max_value=200, value=truck_tank_size_high, step=1)
 with col2:
-    truck_tank_size_medium = st.slider('Tank size of second tank', min_value=1, max_value=200, value=truck_tank_size_medium, step=2)
+    truck_tank_size_medium = st.slider('Tank size of second tank', min_value=1, max_value=200, value=truck_tank_size_medium, step=1)
 with col3:
-    truck_tank_size_low = st.slider('Tank size of third tank', min_value=1, max_value=200, value=truck_tank_size_low, step=2)
+    truck_tank_size_low = st.slider('Tank size of third tank', min_value=1, max_value=200, value=truck_tank_size_low, step=1)
 
 truck_tank_size = [truck_tank_size_high, truck_tank_size_medium, truck_tank_size_low]
 
@@ -156,7 +160,7 @@ with col3:
 station_tank_size = [station_tank_size_high, station_tank_size_medium, station_tank_size_low]
 
 
-df = functions_st.calculate_number_stations(df, 
+df, H2_trucks_num_2030, H2_trucks_num_2040 = functions_st.calculate_number_stations(df, 
                                             selected_length,
                                             demand_share_2030 = demand_share_2030,
                                             demand_share_2040 = demand_share_2040,
@@ -169,6 +173,17 @@ df = functions_st.calculate_number_stations(df,
                                             truck_tank_size = truck_tank_size,
                                             station_tank_size = station_tank_size)
 
+scenario_name = 'scenario_name_ex'
+
+if st.button('Save Scenario' ):
+    scenario_name = st.text_input('Enter the name to save: ', 'scenario_ex')
+    functions_st.save_scenario(df, scenario_name)
+    st.write(('Scenario saved as ' + scenario_name))
+    
+if st.button('Save Predictions ', scenario_name=scenario_name):
+    functions_st.save_predictions(df, scenario_name)
+    st.write('Predictions saved !')
+    
 # st.dataframe(grouped.head(n_rows).style.highlight_max(color='#D8FAD9', axis=0).highlight_min(color = '#FAD8F9', axis=0), use_container_width=True)
 
 

@@ -79,7 +79,7 @@ def calculate_trucks_stations_peryear(df: pd.DataFrame,
     capacity = min(np.sum(station_tank_size)*1000/np.sum(truck_tank_size), conf['open_time'] / conf['avg_time_fill'])
     df["C_"+str(year)] = capacity
     
-    return df
+    return df, H2_trucks_num
     
 def calculate_stations(df: pd.DataFrame, 
                         year: int = 2030) -> pd.DataFrame:
@@ -129,7 +129,7 @@ def calculate_number_stations(df: pd.DataFrame,
     df["avg_distance_mid_aut"] = perc_dist_mid*df["avg_distance_high_aut"]
     df["avg_distance_low_aut"] = perc_dist_low*df["avg_distance_high_aut"]
     
-    df = calculate_trucks_stations_peryear(df, 
+    df, H2_trucks_num_2030 = calculate_trucks_stations_peryear(df, 
                                            year=2030,
                                            demand_share_2030 = demand_share_2030,
                                            demand_share_2040 = demand_share_2040,
@@ -141,7 +141,7 @@ def calculate_number_stations(df: pd.DataFrame,
                                            autonomy_low_km = autonomy_low_km,
                                            truck_tank_size = truck_tank_size,
                                            station_tank_size = station_tank_size)
-    df = calculate_trucks_stations_peryear(df, 
+    df, H2_trucks_num_2040 = calculate_trucks_stations_peryear(df, 
                                            year=2040,
                                            demand_share_2030 = demand_share_2030,
                                            demand_share_2040 = demand_share_2040,
@@ -157,7 +157,7 @@ def calculate_number_stations(df: pd.DataFrame,
     df = calculate_stations(df, year=2030)
     df = calculate_stations(df, year=2040)
 
-    return df
+    return df, H2_trucks_num_2030, H2_trucks_num_2040
 
 def final_station_calculation() -> pd.DataFrame:
     """
@@ -171,13 +171,26 @@ def final_station_calculation() -> pd.DataFrame:
     
     return df_new
 
-# def save_predictions(df):
-#     """Save predictions by region in a json file as dict.
-#     """
-#     df_json = df[["region", "num_stations_2030", "num_stations_2040"]].set_index("region").to_dict()
-#     with open('data/output_' + scenario + '.json', 'w+') as f:
-#         json.dump(df_json, f, ensure_ascii=False)
-#     return None
+def save_scenario(df, scenario_name):
+    """Save predictions by region in a json file as dict.
+    """
+    
+    dict_sc= {
+    "demand_share_2030": demand_share_2030,
+    "demand_share_2040": demand_share_2040,
+    "market_share": [autonomy_high_ms, autonomy_medium_ms, autonomy_low_ms]}
+    conf.update({scenario_name: dict_sc})
+    with open('params/config.json', 'w+') as f:
+        json.dump(conf, f, ensure_ascii=False)
+    return None
+
+def save_predictions(df):
+    """Save predictions by region in a json file as dict.
+    """
+    df_json = df[["region", "num_stations_2030", "num_stations_2040"]].set_index("region").to_dict()
+    with open('data/output_' + scenario + '.json', 'w+') as f:
+        json.dump(df_json, f, ensure_ascii=False)
+    return None
 
 # def get_scenario_output(df):
 #     """Print the outputs for the scenario.
