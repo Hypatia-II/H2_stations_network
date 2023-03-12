@@ -175,15 +175,17 @@ df, H2_trucks_num_2030, H2_trucks_num_2040 = functions_st.calculate_number_stati
 
 scenario_name = 'scenario_name_ex'
 
-if st.button('Save Scenario' ):
-    scenario_name = st.text_input('Enter the name to save: ', 'scenario_ex')
-    functions_st.save_scenario(df, scenario_name)
-    st.write(('Scenario saved as ' + scenario_name))
-    
-if st.button('Save Predictions ', scenario_name=scenario_name):
-    functions_st.save_predictions(df, scenario_name)
-    st.write('Predictions saved !')
-    
+col1, col2 = st.columns(2)
+with col1:
+    if st.button('Save Scenario'):
+        scenario_name = st.text_input('Enter the name to save: ', 'scenario_ex')
+        functions_st.save_scenario(df, scenario_name)
+        st.write(('Scenario saved as ' + scenario_name))
+with col2:
+    if st.button('Save Predictions'):
+        functions_st.save_predictions(df, scenario_name)
+        st.write('Predictions saved !')
+        
 # st.dataframe(grouped.head(n_rows).style.highlight_max(color='#D8FAD9', axis=0).highlight_min(color = '#FAD8F9', axis=0), use_container_width=True)
 
 

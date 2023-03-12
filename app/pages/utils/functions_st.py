@@ -184,11 +184,11 @@ def save_scenario(df, scenario_name):
         json.dump(conf, f, ensure_ascii=False)
     return None
 
-def save_predictions(df):
+def save_predictions(df, scenario_name):
     """Save predictions by region in a json file as dict.
     """
     df_json = df[["region", "num_stations_2030", "num_stations_2040"]].set_index("region").to_dict()
-    with open('data/output_' + scenario + '.json', 'w+') as f:
+    with open('data/output_' + scenario_name + '.json', 'w+') as f:
         json.dump(df_json, f, ensure_ascii=False)
     return None
 
