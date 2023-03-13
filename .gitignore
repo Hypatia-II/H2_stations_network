@@ -131,6 +131,7 @@ dmypy.json
 
 #folders
 data/
+app/pages/utils/html_output
 
 #data file types
 .csv
