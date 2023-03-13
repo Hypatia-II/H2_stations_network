@@ -3,6 +3,7 @@ import json
 import folium
 import geopandas as gpd
 from itertools import chain
+from sklearn.cluster import KMeans
 import numpy as np
 from shapely.geometry import MultiLineString, Point, LineString, Polygon
 from shapely import ops
@@ -325,7 +326,7 @@ class Scenarios(StationLocator):
             
         return top_points_by_region
     
-    def merge_closest_points(self, top_locations: gpd.GeoDataFrame, distance_min: int=5_000):
+    def merge_closest_points(self, top_locations: gpd.GeoDataFrame, distance_min: int=10_000):
         """Merge close points into one station.
 
         Args:
@@ -333,11 +334,13 @@ class Scenarios(StationLocator):
         Returns:
             polygones: final list of points with their score and number of merged points.
         """
+        top_locations = list(zip(top_locations[0], top_locations[1]))
         distances = {}
         for i in range(len(top_locations)):
             distances.setdefault(i, [])
             for j in range(len(top_locations)):
                 if top_locations[i][0].distance(top_locations[j][0]) <= distance_min:
+                    distance = top_locations[i][0].distance(top_locations[j][0])
                     distances[i].append((top_locations[j][0].xy[0][0], top_locations[j][0].xy[1][0]))
         
         for key, values in distances.items():
@@ -428,40 +431,87 @@ class Scenarios(StationLocator):
             lines = self.road_segments
             new_points = []
             for i, j, k in tqdm(zip(sorted_locations[0].tolist(), 
-                                    sorted_locations[1].tolist()#,sorted_locations[2].tolist()
-                                    ), total=sorted_locations.shape[0]):
+                                    sorted_locations[1].tolist(),
+                                    sorted_locations[2].tolist()), total=sorted_locations.shape[0]):
                 best_point = self.nearest_part_of_linestrings(lines, i)
-                new_points.append([Point(best_point), j]) #, k
+                new_points.append([Point(best_point), j, k])
 
         elif isinstance(sorted_locations, list):
             lines = self.road_segments
             new_points = []
             for loc in tqdm(sorted_locations):
                 best_point = self.nearest_part_of_linestrings(lines, loc[0])
-                new_points.append([Point(best_point), loc[1]]) #, loc[2]
+                new_points.append([Point(best_point), loc[1], loc[2]])
     
         else:
             TypeError('Data must either be GeoDataFrame or list')
             
         return new_points
     
-    def get_size_station(self, regions_dem: pd.Series, new_points: list[object], score_total: int):
-        """Get the size of each station based on demand by station.
+    def get_size_station(self, 
+                         new_points: list[object, int, int]):
+        """Get the size of each station based on its score and number of merged stations.
         Args:
             new_points: list of locations, score and number of stations merged.
         Returns:
             new_points: list of locations, size of station and score
+        """
+        thresholds = [
+            np.percentile([k*j for _, j, k in new_points], 50),
+            np.percentile([k*j for _, j, k in new_points], 75)
+            ]
+        final_points = []
+        for i in range(len(new_points)):
+            val = new_points[i][1]*new_points[i][2]
+            if val <= thresholds[0]:
+                final_points.append((new_points[i][0],"small", new_points[i][1]))
+            elif val <= thresholds[1]:
+                final_points.append((new_points[i][0],"medium", new_points[i][1]))
+            else:
+                final_points.append((new_points[i][0],"large", new_points[i][1]))
+        return final_points
+       
+    def calculate_cost(self,
+                       sorted_locations: list[object]) -> gpd.GeoDataFrame:
+        """Calculate costs per station in 2030, 2040
+        
+        Args:
+            sorted_locations: location data with size data
+            
+        Returns:
+            sorted_locations: dataframe with location, size, and costs in 2030 and 2040
+        """
+        sorted_locations = gpd.GeoDataFrame(sorted_locations, geometry=0).set_crs(self.crs)
+        
+        for i, row in tqdm(sorted_locations.iterrows(), total=sorted_locations.shape[0]):
+            cost_profit = self.cost_profit[row[1]]
+            sorted_locations.at[i, 'costs_2030'] = cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2030-(2023 + cost_profit['construction_time'])))
+            sorted_locations.at[i, 'costs_2040'] = 2 * cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2040-(2023 + cost_profit['construction_time'])))
+            
+        return sorted_locations
+    
+    def profitability_by_station(self, final_points: list[object], regions_dem: pd.Series):
+        """Compute the profitability of each station based on its attractiveness score and the demand.
+
+        Args:
+            final_points: list of stations' location, size and score
+            regions_dem: dictionnary of regions and their demand
+            path_conf: path of the config file
+        Returns:
+            stations_final: list of stations' location, size, score, load, profitability (%load) and profitability (binary)
+        
         """
         capacity_stations = self.conf["capacity_stations"]
         profitability_stations = self.conf["profitability_stations"]
 
         regions_dem = regions_dem.to_dict()
         demand_total = sum(regions_dem.values())
+        score_total = sum([score for i, j, score in final_points])
 
         capacity_dict = {
-                    "small": capacity_stations[0],
-                    "medium": capacity_stations[1],
-                    "large": capacity_stations[2]}
+            "small": capacity_stations[0],
+            "medium": capacity_stations[1],
+            "large": capacity_stations[2]}
         profitability_dict = {
             "small": profitability_stations[0],
             "medium": profitability_stations[1],
@@ -469,17 +519,19 @@ class Scenarios(StationLocator):
         }
 
         stations_final = []
-        for i in range(len(new_points)):
-            demand = new_points[i][1]/score_total*demand_total
-            if demand > profitability_dict["large"]*capacity_dict["large"]:
-                station_size = "large"
-            elif demand > profitability_dict["medium"]*capacity_dict["medium"]:
-                station_size = "medium"
-            elif demand > profitability_dict["small"]*capacity_dict["small"]:
-                station_size = "small"
-            stations_final.append((
-                new_points[i][0], station_size,
-                new_points[i][1], demand))
+        count = 0
+        for i in range(len(final_points)):
+            demand = final_points[i][2]/score_total*demand_total
+            capacity = capacity_dict[final_points[i][1]]
+            profitability_binary = demand/capacity>profitability_dict[final_points[i][1]]
+            count += profitability_binary
+            stations_final.append([
+                final_points[i][0], final_points[i][1],
+                final_points[i][2], demand, demand/capacity,
+                profitability_binary
+            ])
+
+        print(f"{count/len(stations_final)} of stations are profitable")   
         return stations_final
     
     def visualize_scenarios(self,
@@ -557,17 +609,21 @@ class Case(Scenarios):
         self.competitors['H2 Conversion'] = self.competitors['H2 Conversion'].fillna(0)
         self.competitors[['lat', 'long']] = self.competitors['Coordinates'].str.split(',', expand=True).astype(float)
         self.competitors['geometry'] = self.competitors.apply(lambda row: Point(row['long'], row['lat']), axis=1)
+        self.competitors = gpd.GeoDataFrame(self.competitors).set_crs('WGS84').to_crs('2154')
         
-        self.competitors_starting = self.competitors[self.competitors['H2 Conversion'] == 1]
+        competitors_starting = self.competitors[self.competitors['H2 Conversion'] == 1]
         competitors_remaining = self.competitors[self.competitors['H2 Conversion'] == 0]
         
-        total_gas_stations = super().get_best_location(candidate_locations=competitors_remaining[:30]) # for sake of computations
+        total_gas_stations = super().get_best_location(candidate_locations=competitors_remaining) # for sake of computations
+        total_h2_stations = super().get_best_location(candidate_locations=competitors_starting)
         self.total_gas_stations = [list(t) for t in total_gas_stations]
+        self.total_h2_stations = [list(t) for t in total_h2_stations]
         
     def recalculate_locations(self, 
                               locations: list[object, int], 
                               competitor_locations: list[object, int],
                               max_distance: int) -> list[object, int]:
+        
         if type(locations[0]) == tuple:
             locations = [list(t) for t in locations]
         if type(competitor_locations) == list:
@@ -587,11 +643,42 @@ class Case(Scenarios):
                 
             point[1] += station_score * station_weight
             
-        return locations
+        return sorted(locations, key=lambda x: x[1], reverse=True)
+    
+    def market_share(self, 
+                     output_scenario: pd.DataFrame,
+                     sorted_locations: list[int, object], 
+                     competitor_locations: list[int, object]):
+        """Get % market share for Total gas stations and Air Liquide
+        Args:
+            sorted_locations: list of sorted scored locations
+            competitor_locations: list of scored competitor locations
+        
+        Returns:
+            scenario: recalculated scenario ratios
+        """
+        
+        share_total = sum([x[1] for x in competitor_locations])
+        share_us = sum([x[1] for x in sorted_locations])
+        
+        scenario = output_scenario.copy()
+        scenario['num_stations_2030'] = np.ceil(scenario['num_stations_2030'] * (share_us/(share_total + share_us))).astype(int)
+        scenario['num_stations_2040'] = np.ceil(scenario['num_stations_2040'] * (share_us/(share_total + share_us))).astype(int)
+        
+        return scenario
     
     def new_stations_per_region(self,
-                                scenario: pd.DataFrame):
+                                output_scenario: pd.DataFrame):
+        """Calculate yearly stations to build per region
         
+        Args:
+            output_scenario: scenarios defined in part 1
+            
+        Returns:
+            scenario: a breakdown of stations per year and regions
+        """
+        
+        scenario = output_scenario.copy()
         avg_increase = (scenario['num_stations_2040'] - scenario['num_stations_2030']) / 10
 
         for i in range(9, 0, -1):
@@ -604,42 +691,67 @@ class Case(Scenarios):
  
         return scenario
     
-    def calculate_case3(self, 
+    def calculate_case1(self,
                         scored_locations: list[object, int],
-                        scenario: pd.DataFrame,
-                        max_distance: int = 50_000,
-                        final_year: int = 2040,):
-        """Simulate scenario 3 for part 3
+                        scenario: pd.DataFrame, 
+                        final_year: int = 2040):
         
-        Args:
-            scored_locations:
-            scenario:
-            final_year:
-            
-        Returns:
-            station_years: dict of new location per year
-            existing_locations: a combination of all
-        """
-        
-        total_h2_stations = [[x, 0] for x in self.competitors_starting['geometry']]
-        
-        all_locations = self.recalculate_locations(scored_locations, self.competitors_starting, max_distance=max_distance)
-        locations_2030 = super().distribute_locations(all_locations, scenario['num_stations_2030'])
+        locations_2030 = super().distribute_locations(scored_locations, scenario['num_stations_2030'])
         locations_2030 = [[x, y] for x, y in zip(locations_2030[0], locations_2030[1])]
-        locations_2040 = super().distribute_locations(all_locations, scenario['num_stations_2040'])
-        locations_2040 = [[x, y] for x, y in zip(locations_2040[0], locations_2040[1])]
-
-        scenario = self.new_stations_per_region(scenario=scenario)
+        locations_2040 = super().distribute_locations(scored_locations, scenario['num_stations_2040'])
+        locations_2040 = [[x, y] for x, y in zip(locations_2040[0], locations_2040[1])]   
+        
+        scenario = self.new_stations_per_region(output_scenario=scenario)
         
         stations_years = {}
         existing_locations = locations_2030.copy()
         stations_years[2030] = existing_locations
         for year in range(2031, final_year+1):
+            remaining_locations = [sublist for sublist in locations_2040 if sublist not in existing_locations]
+            new_stations = super().distribute_locations(remaining_locations, scenario[f'num_stations_{year}'])
+            new_stations = [[x, y] for x, y in zip(new_stations[0], new_stations[1])]
+            stations_years[year] = new_stations
+            existing_locations.extend(new_stations)
+        
+        return stations_years
+    
+    def calculate_case3(self, 
+                        scored_locations: list[object, int],
+                        scenario: pd.DataFrame,
+                        max_distance: int = 50_000,
+                        final_year: int = 2040,):
+        
+        """Simulate scenario 3 for part 3
+        
+        Args:
+            scored_locations:
+            scenario:
+            max_distance:
+            final_year:
+            
+        Returns:
+            station_years: dict of new locations per year
+        """
+        
+        total_h2_stations = self.total_h2_stations        
+        
+        all_locations = self.recalculate_locations(scored_locations, total_h2_stations, max_distance=max_distance)[0:1500] 
+        # only taking the top 1500 locations because don't need to look at all candidate locations
+        locations_2030 = super().distribute_locations(all_locations, scenario['num_stations_2030'])
+        locations_2030 = [[x, y] for x, y in zip(locations_2030[0], locations_2030[1])]
+
+        scenario = self.new_stations_per_region(output_scenario=scenario)
+        
+        stations_years = {}
+        existing_locations = locations_2030.copy()
+        stations_years[2030] = locations_2030
+        for year in range(2031, final_year+1):
+            print('Calculating year', year)
             new_stations_count = sum(scenario[f'num_stations_{year}'])
             total_h2_stations.extend(self.total_gas_stations[:new_stations_count])
             del self.total_gas_stations[:new_stations_count]
             
-            remaining_locations = [sublist for sublist in locations_2040 if sublist not in existing_locations]
+            remaining_locations = [sublist for sublist in all_locations if sublist not in existing_locations]
             new_stations = self.recalculate_locations(remaining_locations, total_h2_stations, max_distance=max_distance)
             new_stations = super().distribute_locations(new_stations, scenario[f'num_stations_{year}'])
             new_stations = [[x, y] for x, y in zip(new_stations[0], new_stations[1])]
@@ -647,5 +759,31 @@ class Case(Scenarios):
             existing_locations.extend(new_stations)
         
         return stations_years
+
+class ProductionLocator(Scenarios):
+    def __init__(self, shapefiles: dict, csvs: dict, jsons: dict, path_conf: str = 'params/config.json', crs: str = '2154') -> None:
+        super().__init__(shapefiles, csvs, jsons, path_conf, crs)
+        self.shp = shapefiles
+        
+    def yearly_demand_per_region(self,
+                                 locations_per_years: dict, 
+                                 cost_profit: pd.DataFrame):
+        
+        regions = gpd.GeoDataFrame(self.shp['FRA_adm1']).to_crs('2154')
+        demand = {}
+        region_demand = {}
+        
+        for year, locations in locations_per_years.items():
             
-         
+            sorted_locations = gpd.GeoDataFrame(locations, geometry=0)
+            region_locations = gpd.sjoin(sorted_locations, regions, how='inner')
+            
+            demand_per_location = cost_profit.loc['tpd', region_locations[1]] * 365
+            region_locations['demand'] = demand_per_location.values
+            region_demand[year] = region_locations
+            
+            demand[year] = region_locations.groupby('NAME_1')['demand'].sum()
+            
+        return demand, region_demand
+    
+    def clustering_sites(self,)
