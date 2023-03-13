@@ -23,7 +23,7 @@ import functions_st
 
 path_conf = '../app/pages/utils/params/config_st.json'
 conf = json.load(open(path_conf, "r"))
-path_scenario_html = '../app/pages/utils/html_output'
+path_scenario1_html = '../app/pages/utils/html_output'
 
 st.set_page_config(page_title="Station Locations", page_icon=":detective:", layout="wide")
 
@@ -36,28 +36,28 @@ st.markdown(
 )
 
 def handle_click_no_button():
-    if st.session_state['scenario_change']:
-        st.session_state.scenario = st.session_state.scenario_change
-        st.session_state.path_to_html = path_scenario_html + "/output_Scenario_" + st.session_state.scenario.replace(" ", "_") + ".html" 
-        st.session_state.path_output_sc = '../data/output_Scenario_' + st.session_state.scenario.replace(" ", "_") + '.json'
-        st.session_state.path_output_map = path_scenario_html + '/' + st.session_state.scenario.replace(" ", "_")
+    if st.session_state['scenario1_change']:
+        st.session_state.scenario1 = st.session_state.scenario1_change
+        st.session_state.path_to_html = path_scenario1_html + "/output_Scenario_" + st.session_state.scenario1.replace(" ", "_") + ".html" 
+        st.session_state.path_output_sc = '../data/output_Scenario_' + st.session_state.scenario1.replace(" ", "_") + '.json'
+        st.session_state.path_output_map = path_scenario1_html + '/' + st.session_state.scenario1.replace(" ", "_")
 
-scenarios_list = [sc.replace("output_Scenario_", "").replace(".html","").replace("_", " ") for sc in os.listdir(path_scenario_html) if sc.startswith("output_Scenario_")]
+scenarios1_list = [sc.replace("output_Scenario_", "").replace(".html","").replace("_", " ") for sc in os.listdir(path_scenario1_html) if sc.startswith("output_Scenario_")]
 
-if 'scenario' not in st.session_state:
-    st.session_state.scenario = scenarios_list[0]
+if 'scenario1' not in st.session_state:
+    st.session_state.scenario1 = scenarios1_list[0]
 if 'path_to_html' not in st.session_state:
-    st.session_state.path_to_html = path_scenario_html + "/output_Scenario_" + st.session_state.scenario.replace(" ", "_") + ".html" 
+    st.session_state.path_to_html = path_scenario1_html + "/output_Scenario_" + st.session_state.scenario1.replace(" ", "_") + ".html" 
 if 'path_output_sc' not in st.session_state:
-    st.session_state.path_output_sc = '../data/output_Scenario_' + st.session_state.scenario.replace(" ", "_") + '.json'
+    st.session_state.path_output_sc = '../data/output_Scenario_' + st.session_state.scenario1.replace(" ", "_") + '.json'
 if 'path_output_map' not in st.session_state:
-    st.session_state.path_output_map = path_scenario_html + '/' + st.session_state.scenario.replace(" ", "_")
+    st.session_state.path_output_map = path_scenario1_html + '/' + st.session_state.scenario1.replace(" ", "_")
     
-scenario = st.selectbox('Select Scenarios of interest:', scenarios_list, on_change=handle_click_no_button, key='scenario_change')
+scenario1 = st.selectbox('Select Scenarios of interest:', scenarios1_list, on_change=handle_click_no_button, key='scenario1_change')
 print(st.session_state.path_to_html)
 # df_show = df.copy()
     
-# path_to_html = path_scenario_html + "/output_" + scenario.replace(" ", "_") + ".html" 
+# path_to_html = path_scenario_html + "/output_" + scenario1.replace(" ", "_") + ".html" 
 with open(st.session_state.path_to_html,'r') as f: 
     html_data = f.read()
 
@@ -97,7 +97,7 @@ with col2:
 # regions_pd_sh.columns = ['region', 'geometry']
 # regions_pd_sh.to_crs(pyproj.CRS.from_epsg(4326), inplace=True)
 
-# path_output_sc = '../data/output_Scenario_' + st.session_state.scenario.replace(" ", "_") + '.json'
+# path_output_sc = '../data/output_Scenario_' + st.session_state.scenario1.replace(" ", "_") + '.json'
 # conf_o_sc = json.load(open(path_output_sc, "r"))
 
 # col_names = list(conf_o_sc.keys())
