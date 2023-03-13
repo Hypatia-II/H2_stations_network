@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import json
+import os
 
 path_conf = '../app/pages/utils/params/config_st.json'
 conf = json.load(open(path_conf, "r"))
@@ -217,6 +218,23 @@ def save_predictions(df, scenario_name_temp):
 
 def load_scenario_data():
     
+    conf = json.load(open(path_conf, "r"))
+
+    keys_l = list((conf.keys()))
+    scenario_list = [ck for ck in keys_l if ck.startswith('Scenario ')]
+    
+    df = pd.DataFrame(columns=['num_stations_2030', 'num_stations_2040'], index=scenario_list)
+    for scenario_i in scenario_list:
+        scenario_file = scenario_i.replace(" ", "_")
+        path_output_sc = '../data/output_' + scenario_file + '.json'
+        conf_o_sc = json.load(open(path_output_sc, "r"))
+        df.loc[scenario_i] = sum(list(conf_o_sc['num_stations_2030'].values())), sum(list(conf_o_sc['num_stations_2040'].values()))
+    return df
+
+def load_scenario_stations():
+    
+    path_scenario_html = '../app/pages/utils/html_output'
+    os.listdir(path_scenario_html)
     conf = json.load(open(path_conf, "r"))
 
     keys_l = list((conf.keys()))

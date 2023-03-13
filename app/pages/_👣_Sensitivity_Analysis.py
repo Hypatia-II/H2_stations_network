@@ -41,11 +41,6 @@ def load_data(path):
     df = pd.read_csv(path)
     return df
 
-
-# def handle_click(new_var):
-#     st.session_state.scenario = new_var
-#     return None
-
 def handle_click_no_button():
     if st.session_state['scenario_change']:
         st.session_state.scenario = 'Scenario ' + st.session_state.scenario_change
