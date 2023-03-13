@@ -35,21 +35,22 @@ def handle_click_sc_names():
 df = functions_st.load_scenario_data()
 
 scenarios_names = list(df.index)
+scenarios_names_wo_sa = list(df.index)
 scenarios_names = ["Select All"] + scenarios_names
 if 'selected_scenarios' not in st.session_state:
     st.session_state.selected_scenarios = "Select All"
 selected_scenarios = st.multiselect('Select Scenarios of interest:', scenarios_names, on_change=handle_click_sc_names, key='selected_scenarios_change')
 df_show = df.copy()
 if (len(st.session_state.selected_scenarios)==0):
-    st.session_state.selected_scenarios = scenarios_names
-    st.session_state.selected_scenarios.remove("Select All")
+    st.session_state.selected_scenarios = scenarios_names_wo_sa
 elif (not isinstance(st.session_state.selected_scenarios, list)) and ("Select All" in st.session_state.selected_scenarios):
-    st.session_state.selected_scenarios = scenarios_names
-    st.session_state.selected_scenarios.remove("Select All")
+    st.session_state.selected_scenarios = scenarios_names_wo_sa
+elif (isinstance(st.session_state.selected_scenarios, list)) and ((len(st.session_state.selected_scenarios)==1) and ("Select All" in st.session_state.selected_scenarios)):
+    st.session_state.selected_scenarios = scenarios_names_wo_sa
 else:
-    if "Select All" in st.session_state.selected_scenarios:
+    if (((len(st.session_state.selected_scenarios)>1)) & ("Select All" in st.session_state.selected_scenarios)):
         st.session_state.selected_scenarios.remove("Select All")
-    df_show = df.loc[st.session_state.selected_scenarios].copy()
+    df_show = df_show.loc[st.session_state.selected_scenarios].copy()
 df_show.sort_values('num_stations_2040', inplace=True, ascending=False)
 cols_show = ['Total Number of Stations 2030', 'Total Number of Stations 2040']
 df_show.columns = cols_show
@@ -101,4 +102,7 @@ with col2:
 
 st.markdown('##')
 
-st.dataframe(df_show.style.highlight_max(color='#74CD67', axis=0).highlight_min(color = '#E57760', axis=0), use_container_width=True)
+if len(df_show)>1:
+    st.dataframe(df_show.style.highlight_max(color='#74CD67', axis=0).highlight_min(color = '#E57760', axis=0), use_container_width=True)
+else:
+    st.dataframe(df_show, use_container_width=True)
