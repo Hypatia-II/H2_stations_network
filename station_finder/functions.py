@@ -608,17 +608,21 @@ class Case(Scenarios):
         self.competitors['H2 Conversion'] = self.competitors['H2 Conversion'].fillna(0)
         self.competitors[['lat', 'long']] = self.competitors['Coordinates'].str.split(',', expand=True).astype(float)
         self.competitors['geometry'] = self.competitors.apply(lambda row: Point(row['long'], row['lat']), axis=1)
+        self.competitors = gpd.GeoDataFrame(self.competitors).set_crs('WGS84').to_crs('2154')
         
-        self.competitors_starting = self.competitors[self.competitors['H2 Conversion'] == 1]
+        competitors_starting = self.competitors[self.competitors['H2 Conversion'] == 1]
         competitors_remaining = self.competitors[self.competitors['H2 Conversion'] == 0]
         
-        total_gas_stations = super().get_best_location(candidate_locations=competitors_remaining[:30]) # for sake of computations
+        total_gas_stations = super().get_best_location(candidate_locations=competitors_remaining) # for sake of computations
+        total_h2_stations = super().get_best_location(candidate_locations=competitors_starting)
         self.total_gas_stations = [list(t) for t in total_gas_stations]
+        self.total_h2_stations = [list(t) for t in total_h2_stations]
         
     def recalculate_locations(self, 
                               locations: list[object, int], 
                               competitor_locations: list[object, int],
                               max_distance: int) -> list[object, int]:
+        
         if type(locations[0]) == tuple:
             locations = [list(t) for t in locations]
         if type(competitor_locations) == list:
@@ -638,11 +642,42 @@ class Case(Scenarios):
                 
             point[1] += station_score * station_weight
             
-        return locations
+        return sorted(locations, key=lambda x: x[1], reverse=True)
+    
+    def market_share(self, 
+                     output_scenario: pd.DataFrame,
+                     sorted_locations: list[int, object], 
+                     competitor_locations: list[int, object]):
+        """Get % market share for Total gas stations and Air Liquide
+        Args:
+            sorted_locations: list of sorted scored locations
+            competitor_locations: list of scored competitor locations
+        
+        Returns:
+            scenario: recalculated scenario ratios
+        """
+        
+        share_total = sum([x[1] for x in competitor_locations])
+        share_us = sum([x[1] for x in sorted_locations])
+        
+        scenario = output_scenario.copy()
+        scenario['num_stations_2030'] = np.ceil(scenario['num_stations_2030'] * (share_us/(share_total + share_us))).astype(int)
+        scenario['num_stations_2040'] = np.ceil(scenario['num_stations_2040'] * (share_us/(share_total + share_us))).astype(int)
+        
+        return scenario
     
     def new_stations_per_region(self,
-                                scenario: pd.DataFrame):
+                                output_scenario: pd.DataFrame):
+        """Calculate yearly stations to build per region
         
+        Args:
+            output_scenario: scenarios defined in part 1
+            
+        Returns:
+            scenario: a breakdown of stations per year and regions
+        """
+        
+        scenario = output_scenario.copy()
         avg_increase = (scenario['num_stations_2040'] - scenario['num_stations_2030']) / 10
 
         for i in range(9, 0, -1):
@@ -655,42 +690,67 @@ class Case(Scenarios):
  
         return scenario
     
-    def calculate_case3(self, 
+    def calculate_case1(self,
                         scored_locations: list[object, int],
-                        scenario: pd.DataFrame,
-                        max_distance: int = 50_000,
-                        final_year: int = 2040,):
-        """Simulate scenario 3 for part 3
+                        scenario: pd.DataFrame, 
+                        final_year: int = 2040):
         
-        Args:
-            scored_locations:
-            scenario:
-            final_year:
-            
-        Returns:
-            station_years: dict of new location per year
-            existing_locations: a combination of all
-        """
-        
-        total_h2_stations = [[x, 0] for x in self.competitors_starting['geometry']]
-        
-        all_locations = self.recalculate_locations(scored_locations, self.competitors_starting, max_distance=max_distance)
-        locations_2030 = super().distribute_locations(all_locations, scenario['num_stations_2030'])
+        locations_2030 = super().distribute_locations(scored_locations, scenario['num_stations_2030'])
         locations_2030 = [[x, y] for x, y in zip(locations_2030[0], locations_2030[1])]
-        locations_2040 = super().distribute_locations(all_locations, scenario['num_stations_2040'])
-        locations_2040 = [[x, y] for x, y in zip(locations_2040[0], locations_2040[1])]
-
-        scenario = self.new_stations_per_region(scenario=scenario)
+        locations_2040 = super().distribute_locations(scored_locations, scenario['num_stations_2040'])
+        locations_2040 = [[x, y] for x, y in zip(locations_2040[0], locations_2040[1])]   
+        
+        scenario = self.new_stations_per_region(output_scenario=scenario)
         
         stations_years = {}
         existing_locations = locations_2030.copy()
         stations_years[2030] = existing_locations
         for year in range(2031, final_year+1):
+            remaining_locations = [sublist for sublist in locations_2040 if sublist not in existing_locations]
+            new_stations = super().distribute_locations(remaining_locations, scenario[f'num_stations_{year}'])
+            new_stations = [[x, y] for x, y in zip(new_stations[0], new_stations[1])]
+            stations_years[year] = new_stations
+            existing_locations.extend(new_stations)
+        
+        return stations_years
+    
+    def calculate_case3(self, 
+                        scored_locations: list[object, int],
+                        scenario: pd.DataFrame,
+                        max_distance: int = 50_000,
+                        final_year: int = 2040,):
+        
+        """Simulate scenario 3 for part 3
+        
+        Args:
+            scored_locations:
+            scenario:
+            max_distance:
+            final_year:
+            
+        Returns:
+            station_years: dict of new locations per year
+        """
+        
+        total_h2_stations = self.total_h2_stations        
+        
+        all_locations = self.recalculate_locations(scored_locations, total_h2_stations, max_distance=max_distance)[0:1500] 
+        # only taking the top 1500 locations because don't need to look at all candidate locations
+        locations_2030 = super().distribute_locations(all_locations, scenario['num_stations_2030'])
+        locations_2030 = [[x, y] for x, y in zip(locations_2030[0], locations_2030[1])]
+
+        scenario = self.new_stations_per_region(output_scenario=scenario)
+        
+        stations_years = {}
+        existing_locations = locations_2030.copy()
+        stations_years[2030] = locations_2030
+        for year in range(2031, final_year+1):
+            print('Calculating year', year)
             new_stations_count = sum(scenario[f'num_stations_{year}'])
             total_h2_stations.extend(self.total_gas_stations[:new_stations_count])
             del self.total_gas_stations[:new_stations_count]
             
-            remaining_locations = [sublist for sublist in locations_2040 if sublist not in existing_locations]
+            remaining_locations = [sublist for sublist in all_locations if sublist not in existing_locations]
             new_stations = self.recalculate_locations(remaining_locations, total_h2_stations, max_distance=max_distance)
             new_stations = super().distribute_locations(new_stations, scenario[f'num_stations_{year}'])
             new_stations = [[x, y] for x, y in zip(new_stations[0], new_stations[1])]
@@ -698,5 +758,7 @@ class Case(Scenarios):
             existing_locations.extend(new_stations)
         
         return stations_years
-            
-         
+
+class ProductionLocator(Scenarios):
+    def __init__(self, shapefiles: dict, csvs: dict, jsons: dict, path_conf: str = 'params/config.json', crs: str = '2154') -> None:
+        super().__init__(shapefiles, csvs, jsons, path_conf, crs)
