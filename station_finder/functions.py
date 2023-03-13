@@ -319,7 +319,7 @@ class Scenarios(StationLocator):
             
         return top_points_by_region
     
-    def merge_closest_points(self, top_locations: gpd.GeoDataFrame, distance_min: int=10_000):
+    def merge_closest_points(self, top_locations: gpd.GeoDataFrame, distance_min: int=5_000):
         """Merge close points into one station.
 
         Args:
@@ -327,13 +327,11 @@ class Scenarios(StationLocator):
         Returns:
             polygones: final list of points with their score and number of merged points.
         """
-        top_locations = list(zip(top_locations[0], top_locations[1]))
         distances = {}
         for i in range(len(top_locations)):
             distances.setdefault(i, [])
             for j in range(len(top_locations)):
                 if top_locations[i][0].distance(top_locations[j][0]) <= distance_min:
-                    distance = top_locations[i][0].distance(top_locations[j][0])
                     distances[i].append((top_locations[j][0].xy[0][0], top_locations[j][0].xy[1][0]))
         
         for key, values in distances.items():
@@ -424,87 +422,40 @@ class Scenarios(StationLocator):
             lines = self.road_segments
             new_points = []
             for i, j, k in tqdm(zip(sorted_locations[0].tolist(), 
-                                    sorted_locations[1].tolist(),
-                                    sorted_locations[2].tolist()), total=sorted_locations.shape[0]):
+                                    sorted_locations[1].tolist()#,sorted_locations[2].tolist()
+                                    ), total=sorted_locations.shape[0]):
                 best_point = self.nearest_part_of_linestrings(lines, i)
-                new_points.append([Point(best_point), j, k])
+                new_points.append([Point(best_point), j]) #, k
 
         elif isinstance(sorted_locations, list):
             lines = self.road_segments
             new_points = []
             for loc in tqdm(sorted_locations):
                 best_point = self.nearest_part_of_linestrings(lines, loc[0])
-                new_points.append([Point(best_point), loc[1], loc[2]])
+                new_points.append([Point(best_point), loc[1]]) #, loc[2]
     
         else:
             TypeError('Data must either be GeoDataFrame or list')
             
         return new_points
     
-    def get_size_station(self, 
-                         new_points: list[object]):
-        """Get the size of each station based on its score and number of merged stations.
+    def get_size_station(self, regions_dem: pd.Series, new_points: list[object], score_total: int):
+        """Get the size of each station based on demand by station.
         Args:
             new_points: list of locations, score and number of stations merged.
         Returns:
             new_points: list of locations, size of station and score
-        """
-        thresholds = [
-            np.percentile([k*j for _, j, k in new_points], 50),
-            np.percentile([k*j for _, j, k in new_points], 75)
-            ]
-        final_points = []
-        for i in range(len(new_points)):
-            val = new_points[i][1]*new_points[i][2]
-            if val <= thresholds[0]:
-                final_points.append((new_points[i][0],"small", new_points[i][1]))
-            elif val <= thresholds[1]:
-                final_points.append((new_points[i][0],"medium", new_points[i][1]))
-            else:
-                final_points.append((new_points[i][0],"large", new_points[i][1]))
-        return final_points
-       
-    def calculate_cost(self,
-                       sorted_locations: list[object]) -> gpd.GeoDataFrame:
-        """Calculate costs per station in 2030, 2040
-        
-        Args:
-            sorted_locations: location data with size data
-            
-        Returns:
-            sorted_locations: dataframe with location, size, and costs in 2030 and 2040
-        """
-        sorted_locations = gpd.GeoDataFrame(sorted_locations, geometry=0).set_crs(self.crs)
-        
-        for i, row in tqdm(sorted_locations.iterrows(), total=sorted_locations.shape[0]):
-            cost_profit = self.cost_profit[row[1]]
-            sorted_locations.at[i, 'costs_2030'] = cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2030-(2023 + cost_profit['construction_time'])))
-            sorted_locations.at[i, 'costs_2040'] = 2 * cost_profit['capex'] + (cost_profit['capex'] * cost_profit['yearly_opex'] * (2040-(2023 + cost_profit['construction_time'])))
-            
-        return sorted_locations
-    
-    def profitability_by_station(self, final_points: list[object], regions_dem: pd.Series):
-        """Compute the profitability of each station based on its attractiveness score and the demand.
-
-        Args:
-            final_points: list of stations' location, size and score
-            regions_dem: dictionnary of regions and their demand
-            path_conf: path of the config file
-        Returns:
-            stations_final: list of stations' location, size, score, load, profitability (%load) and profitability (binary)
-        
         """
         capacity_stations = self.conf["capacity_stations"]
         profitability_stations = self.conf["profitability_stations"]
 
         regions_dem = regions_dem.to_dict()
         demand_total = sum(regions_dem.values())
-        score_total = sum([score for i, j, score in final_points])
 
         capacity_dict = {
-            "small": capacity_stations[0],
-            "medium": capacity_stations[1],
-            "large": capacity_stations[2]}
+                    "small": capacity_stations[0],
+                    "medium": capacity_stations[1],
+                    "large": capacity_stations[2]}
         profitability_dict = {
             "small": profitability_stations[0],
             "medium": profitability_stations[1],
@@ -512,19 +463,17 @@ class Scenarios(StationLocator):
         }
 
         stations_final = []
-        count = 0
-        for i in range(len(final_points)):
-            demand = final_points[i][2]/score_total*demand_total
-            capacity = capacity_dict[final_points[i][1]]
-            profitability_binary = demand/capacity>profitability_dict[final_points[i][1]]
-            count += profitability_binary
-            stations_final.append([
-                final_points[i][0], final_points[i][1],
-                final_points[i][2], demand, demand/capacity,
-                profitability_binary
-            ])
-
-        print(f"{count/len(stations_final)} of stations are profitable")   
+        for i in range(len(new_points)):
+            demand = new_points[i][1]/score_total*demand_total
+            if demand > profitability_dict["large"]*capacity_dict["large"]:
+                station_size = "large"
+            elif demand > profitability_dict["medium"]*capacity_dict["medium"]:
+                station_size = "medium"
+            elif demand > profitability_dict["small"]*capacity_dict["small"]:
+                station_size = "small"
+            stations_final.append((
+                new_points[i][0], station_size,
+                new_points[i][1], demand))
         return stations_final
     
     def visualize_scenarios(self,
