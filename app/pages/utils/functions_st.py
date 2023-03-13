@@ -3,8 +3,11 @@ import numpy as np
 import json
 
 path_conf = '../app/pages/utils/params/config_st.json'
-scenario ="scenario1"
 conf = json.load(open(path_conf, "r"))
+
+keys_l = list((conf.keys()))
+scenario_list = [ck for ck in keys_l if ck.startswith('Scenario ')]
+scenario = scenario_list[0]
 
 # DONE
 # Value entry & Selection
@@ -102,7 +105,7 @@ def calculate_stations(df: pd.DataFrame,
     return df, num_stations
 
 def calculate_number_stations(df: pd.DataFrame, 
-                              length_to_use, 
+                              length_to_use: str = 'longest_line', 
                               demand_share_2030: float = demand_share_2030,
                               demand_share_2040: float = demand_share_2040,
                               autonomy_high_ms: int = autonomy_high_ms,
@@ -115,8 +118,8 @@ def calculate_number_stations(df: pd.DataFrame,
                               station_tank_size: list = station_tank_size,
                               H2_stations_2030: int = 0,
                               H2_stations_2040: int = 0,
-                              delta1 = None,
-                              delta2 = None) -> pd.DataFrame:
+                              del1 = None,
+                              del2 = None) -> pd.DataFrame:
     """
     Estimate the number of stations from the number of trucks present
 
@@ -161,31 +164,33 @@ def calculate_number_stations(df: pd.DataFrame,
     
     H2_stations_2030_prev = H2_stations_2030
     H2_stations_2040_prev = H2_stations_2040
+    del1_prev = del1
+    del2_prev = del2
     
     df, H2_stations_2030 = calculate_stations(df, year=2030)
     df, H2_stations_2040 = calculate_stations(df, year=2040)
     
-    if H2_stations_2030_prev != H2_stations_2030:
-        delta1 = H2_stations_2030 - H2_stations_2030_prev
+    if (H2_stations_2030_prev != H2_stations_2030) or (H2_stations_2040_prev != H2_stations_2040):
+        del1 = H2_stations_2030 - H2_stations_2030_prev
+        del2 = H2_stations_2040 - H2_stations_2040_prev
+        if (del1==del1_prev) or (del1==0):
+            del1 = None
+        if (del2==del2_prev) or (del2==0):
+            del2 = None
+            
+    # if H2_stations_2030_prev != H2_stations_2030:
+    #     del1 = H2_stations_2030 - H2_stations_2030_prev
+    #     if del1==del1_prev:
+    #         del1 = None
         
-    if H2_stations_2040_prev != H2_stations_2040:
-        delta2 = H2_stations_2040 - H2_stations_2040_prev
+    # if H2_stations_2040_prev != H2_stations_2040:
+    #     del2 = H2_stations_2040 - H2_stations_2040_prev
+    #     if del2==del2_prev:
+    #         del2 = None
 
-    return df, H2_stations_2030, H2_stations_2040, delta1, delta2
+    return df, H2_stations_2030, H2_stations_2040, del1, del2
 
-def final_station_calculation() -> pd.DataFrame:
-    """
-    Combine all functions to create the new dataframe with the estimated number of refill stations
-
-    Returns:
-        df_new: final dataframe with all needed metrics calculated
-    """
-
-    df_new = calculate_number_stations(df_new)
-    
-    return df_new
-
-def save_scenario(df, scenario_name):
+def save_scenario(scenario_name):
     """Save predictions by region in a json file as dict.
     """
     
@@ -205,49 +210,3 @@ def save_predictions(df, scenario_name):
     with open('../data/output_' + scenario_name + '.json', 'w+') as f:
         json.dump(df_json, f, ensure_ascii=False)
     return None
-
-# def get_scenario_output(df):
-#     """Print the outputs for the scenario.
-#     """
-#     num_stations_2030 = df["num_stations_2030"].sum()
-#     num_stations_2040 = df["num_stations_2040"].sum()
-#     print(f"The output for {scenario} is {num_stations_2030} for 2030 and {num_stations_2040} for 2040.")
-#     for region in df["region"].values:
-#         num_station_2030 = df[df.region==region]["num_stations_2030"].values[0]
-#         num_station_2040 = df[df.region==region]["num_stations_2040"].values[0]
-#         print(f"Region {region}: {num_station_2030} stations for 2030 and {num_station_2040} for 2040")
-#     return None
-
-def calculate_metrics(df, selected_year, selected_month, selected_day):
-    if selected_year == "Select All" and selected_month == "Select All" and selected_day == "Select All":
-        filtered_df = df
-    elif selected_year != "Select All" and selected_month == "Select All" and selected_day == "Select All":
-        filtered_df = df[(df['year'] == selected_year)]
-    elif selected_year == "Select All" and selected_month != "Select All" and selected_day == "Select All":
-        filtered_df = df[(df['month'] == selected_month)]
-    elif selected_year == "Select All" and selected_month == "Select All" and selected_day != "Select All":
-        filtered_df = df[(df['day'] == selected_day)]
-    elif selected_year != "Select All" and selected_month != "Select All" and selected_day == "Select All":
-        filtered_df = df[(df['year'] == selected_year) &
-                        (df['month'] == selected_month)]
-    elif selected_year != "Select All" and selected_month == "Select All" and selected_day != "Select All":
-        filtered_df = df[(df['year'] == selected_year) &
-                        (df['day'] == selected_day)]
-    elif selected_year == "Select All" and selected_month != "Select All" and selected_day != "Select All":
-        filtered_df = df[(df['day'] == selected_day) &
-                        (df['month'] == selected_month)]
-    elif selected_year != "Select All" and selected_month != "Select All" and selected_day != "Select All":
-        filtered_df = df[(df['year'] == selected_year) &
-                        (df['month'] == selected_month) &
-                        (df['day'] == selected_day)]
-    
-    #Metrics
-    avg_wait_time = filtered_df['WAIT_TIME_MAX'].mean()
-    guest_carried = filtered_df['GUEST_CARRIED'].mean() 
-    avg_adjust_capacity_utilization = (filtered_df['GUEST_CARRIED'].sum() / filtered_df['ADJUST_CAPACITY'].sum()) * 100
-    sum_attendance = filtered_df['attendance'].sum()
-
-    not_equal = filtered_df[filtered_df['CAPACITY'] != filtered_df['ADJUST_CAPACITY']]
-    per_cap_adj = not_equal.shape[0] / df.shape[0] * 100
-
-    return avg_wait_time, guest_carried, avg_adjust_capacity_utilization, sum_attendance, per_cap_adj
