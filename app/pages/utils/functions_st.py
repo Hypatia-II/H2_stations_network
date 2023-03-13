@@ -190,23 +190,42 @@ def calculate_number_stations(df: pd.DataFrame,
 
     return df, H2_stations_2030, H2_stations_2040, del1, del2
 
-def save_scenario(scenario_name):
+def save_scenario(scenario_name_temp, demand_share_2030_temp, demand_share_2040_temp, autonomy_high_ms_temp, autonomy_medium_ms_temp, autonomy_low_ms_temp):
     """Save predictions by region in a json file as dict.
     """
+    path_conf = '../app/pages/utils/params/config_st.json'
+    conf = json.load(open(path_conf, "r"))
     
     dict_sc= {
-    "demand_share_2030": demand_share_2030,
-    "demand_share_2040": demand_share_2040,
-    "market_share": [autonomy_high_ms, autonomy_medium_ms, autonomy_low_ms]}
-    conf.update({scenario_name: dict_sc})
+    "demand_share_2030": demand_share_2030_temp,
+    "demand_share_2040": demand_share_2040_temp,
+    "market_share": [autonomy_high_ms_temp, autonomy_medium_ms_temp, autonomy_low_ms_temp]}
+    conf.update({scenario_name_temp: dict_sc})
     with open(path_conf, 'w+') as f:
         json.dump(conf, f, ensure_ascii=False)
     return None
 
-def save_predictions(df, scenario_name):
+def save_predictions(df, scenario_name_temp):
     """Save predictions by region in a json file as dict.
     """
     df_json = df[["region", "num_stations_2030", "num_stations_2040"]].set_index("region").to_dict()
-    with open('../data/output_' + scenario_name + '.json', 'w+') as f:
+    with open('../data/output_' + scenario_name_temp + '.json', 'w+') as f:
         json.dump(df_json, f, ensure_ascii=False)
     return None
+
+# Page 2 functions
+
+def load_scenario_data():
+    
+    conf = json.load(open(path_conf, "r"))
+
+    keys_l = list((conf.keys()))
+    scenario_list = [ck for ck in keys_l if ck.startswith('Scenario ')]
+    
+    df = pd.DataFrame(columns=['num_stations_2030', 'num_stations_2040'], index=scenario_list)
+    for scenario_i in scenario_list:
+        scenario_file = scenario_i.replace(" ", "_")
+        path_output_sc = '../data/output_' + scenario_file + '.json'
+        conf_o_sc = json.load(open(path_output_sc, "r"))
+        df.loc[scenario_i] = sum(list(conf_o_sc['num_stations_2030'].values())), sum(list(conf_o_sc['num_stations_2040'].values()))
+    return df

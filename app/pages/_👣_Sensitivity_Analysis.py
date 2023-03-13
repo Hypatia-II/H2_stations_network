@@ -2,27 +2,20 @@ import folium as fl
 from streamlit_folium import st_folium
 import streamlit as st
 from owslib.wms import WebMapService
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
-
 import altair as alt
 import json
-
 import sys
 
 print(sys.path)
 sys.path.append('../app/pages/utils')
-# sys.path.append('utils')
 import functions_st
-# print(sys.path)
-# import functions_st
 
 path_conf = '../app/pages/utils/params/config_st.json'
-# if 'conf' not in st.session_state:
 conf = json.load(open(path_conf, "r"))
 
 st.set_page_config(layout="wide", page_title="Sensitivity Analysis", page_icon=":compass:")
@@ -65,6 +58,12 @@ def handle_click_no_button():
 def handle_click_no_button_sc():
     if st.session_state['sc_name_change']:
         st.session_state.scenario_name = 'Scenario ' + st.session_state.sc_name_change
+        functions_st.save_scenario(scenario_name_temp=st.session_state.scenario_name, 
+                                   demand_share_2030_temp=st.session_state.demand_share_2030,
+                                   demand_share_2040_temp=st.session_state.demand_share_2040,
+                                   autonomy_high_ms_temp=st.session_state.autonomy_high_ms,
+                                   autonomy_medium_ms_temp=st.session_state.autonomy_medium_ms,
+                                   autonomy_low_ms_temp=st.session_state.autonomy_low_ms)
         
 def handle_click_all_vars():
     if st.session_state['demand_share_2030_change']:
@@ -219,21 +218,23 @@ df, st.session_state.H2_stations_2030, st.session_state.H2_stations_2040, st.ses
                                             del2=st.session_state.delta2)
 
 
-scenario_name_ex = 'Example'
 if 'scenario_name' not in st.session_state:
     st.session_state.scenario_name = 'Scenario Example'
+scenario_name_ex = st.session_state.scenario_name
+scenario_name_ex = scenario_name_ex.replace("Scenario ", "")
 # scenario_name = 'Scenario Example'
 col1, col2 = st.columns(2)
 with col1:
     if st.button('Save Scenario'):
         scenario_name = st.text_input('Enter the name to save: ', scenario_name_ex, on_change=handle_click_no_button_sc, key='sc_name_change')
-        # scenario_name = 'Scenario ' + scenario_name
-        functions_st.save_scenario(scenario_name=st.session_state.scenario_name)
+        # st.write(st.session_state.scenario_name)
+        # functions_st.save_scenario(scenario_name_temp=st.session_state.scenario_name)
         st.write(('Scenario saved as ' + st.session_state.scenario_name))
 with col2:
     if st.button('Save Predictions'):
-        scenario_file_save = st.session_state.scenario_name.replace(" ", "_")
-        functions_st.save_predictions(df, scenario_name=scenario_file_save)
+        scenario_file_save = st.session_state.scenario_name
+        scenario_file_save = scenario_file_save.replace(" ", "_")
+        functions_st.save_predictions(df, scenario_name_temp=scenario_file_save)
         st.write('Predictions saved !')
 
 cols_keep = ['region', 'R_2030_total', 'R_2040_total', 'h2_num_2030', 'h2_num_2040', 'num_stations_2030', 'num_stations_2040']
@@ -260,47 +261,3 @@ col1.metric("", st.session_state.H2_stations_2030, delta=st.session_state.delta1
 col2.metric("", st.session_state.H2_stations_2040, delta=st.session_state.delta2)
 
 st.dataframe(df_show.style.highlight_max(color='#74CD67', axis=0).highlight_min(color = '#E57760', axis=0), use_container_width=True)
-
-
-# #st.line_chart(filtered_df.groupby("WORK_DATE")["WAIT_TIME_MAX"].mean())
-# time_df = filtered_df.groupby("WORK_DATE")["WAIT_TIME_MAX"].mean().reset_index()
-# chart = alt.Chart(time_df).mark_line(color="#5DB44C").encode(
-#         x= alt.X('WORK_DATE', title="Date"),
-#         y=alt.Y('WAIT_TIME_MAX', title='Wait Time'),
-#     ).properties(
-#         title='Average Wait Time over time', width=1250)
-# st.write(chart)
-
-# col1, col2, col3, col4 = st.columns([1,1,1,1])
-# col1.subheader(":rocket: :green[Minimum Waiting Times] _(in minutes)_")
-# col2.subheader(":clock1: Date of the Min Waiting Times")
-# col3.subheader(':turtle: :green[Maximum Waiting Times] _(in minutes)_')
-# col4.subheader(":clock1: Date of the Max Waiting Times")
-
-# min_wait_time = filtered_df['WAIT_TIME_MAX'].min()
-# min_date = pd.Timestamp(filtered_df.loc[filtered_df['WAIT_TIME_MAX'] == min_wait_time, 'WORK_DATE'].iloc[0]).date().strftime("%d/%m/%Y")
-# max_wait_time = filtered_df['WAIT_TIME_MAX'].max()
-# max_date = pd.Timestamp(filtered_df.loc[filtered_df['WAIT_TIME_MAX'] == max_wait_time, 'WORK_DATE'].iloc[0]).date().strftime("%d/%m/%Y")
-
-# col1.metric("", min_wait_time)
-# col2.metric("", min_date)
-# col3.metric("" , max_wait_time)
-# col4.metric("", max_date)
-
-# hourly_df = filtered_df.groupby("hour")["WAIT_TIME_MAX"].mean().reset_index()
-
-# st.markdown('##')
-
-# chart = alt.Chart(hourly_df).mark_bar(color="#D8FAD9").encode(
-#     x=alt.X('hour:O', title='Hour'),
-#     y=alt.Y('WAIT_TIME_MAX:Q', title='Avg Wait Time')
-# ).properties(
-#     width=1250
-# )
-
-# line = chart.mark_line(color='#5DB44C').encode(
-#     x='hour:O',
-#     y='WAIT_TIME_MAX:Q'
-# )
-
-# st.write(chart + line)
