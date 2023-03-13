@@ -57,13 +57,9 @@ print(st.session_state.path_to_html)
 with open(st.session_state.path_to_html,'r') as f: 
     html_data = f.read()
 
-## Show in webpage
-# st.header("Show an external HTML")
-# st.components.v1.html(html_data, width=500, height=500)
-
 col1, col2 = st.columns(2)
 with col1:
-    st.header("H2 Stations Locations")
+    st.header("H2 Stations Locations", )
     st.components.v1.html(html_data, width=500, height=500)
 with col2:
     st.header("Density Map")
