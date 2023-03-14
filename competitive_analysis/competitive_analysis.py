@@ -10,13 +10,11 @@ warnings.filterwarnings("ignore")
 class Competition_Scenarios():
     def __init__(self, 
                  jsons: dict,
-                 path_conf: str = 'params/config.json', 
-                 scenario: str="scenario1") -> None:
+                 path_conf: str = 'params/config.json') -> None:
             self.conf = json.load(open(path_conf, "r"))
-            self.scenario = scenario
             self.jsons = jsons
 
-    def stations_per_year(self, final_points: list[object]) -> gpd.GeoDataFrame:
+    def stations_per_year(self, final_points: list[object], scenario: str="scenario1") -> gpd.GeoDataFrame:
         """Location and number of stations to be operational per year.
 
         Args:
@@ -29,7 +27,7 @@ class Competition_Scenarios():
         final_points_copy.rename(columns={0:"points", 1:"size", 2:"score", 3:"2040_demand"}, inplace=True)
         final_points_copy.sort_values(by="score", ascending=False, inplace=True)
         final_points_copy.reset_index(inplace=True, drop=True)  
-        if self.scenario == "scenario2":
+        if scenario == "scenario2":
             n_2030_total = np.sum(self.jsons['output_scenario1']["num_stations_2030"])
             n_2040_total = np.sum(self.jsons['output_scenario1']["num_stations_2040"])
             n_2030=int(np.round(n_2030_total/2))
@@ -41,7 +39,7 @@ class Competition_Scenarios():
                 final_points_copy.iloc[n_2030_total:n,:].sample(n=n_2040)], axis=0)
             final_point_scenario.sort_values(by="score", ascending=False, inplace=True)
             final_point_scenario.reset_index(inplace=True, drop=True)
-        elif self.scenario == "scenario1":
+        elif scenario == "scenario1":
             n_2030 = np.sum(self.jsons['output_scenario2']["num_stations_2030"])
             n_2040 = np.sum(self.jsons['output_scenario2']["num_stations_2040"])
             n_tot = n_2030 + n_2040
@@ -72,7 +70,7 @@ class Competition_Scenarios():
         """
         cost_profit_dict = self.jsons["cost_profit"]
         growth_rate = self.conf["growth_rate"]
-        stations_cost_rev = final_point_scenario[~final_point_scenario.year.isna()]
+        stations_cost_rev = final_point_scenario[~final_point_scenario.year.isna()][~(final_point_scenario["size"]=="")]
         for i, row in tqdm(stations_cost_rev.iterrows(), total=stations_cost_rev.shape[0]):
             cost_profit = cost_profit_dict[row[1]]
             stations_cost_rev.at[i, 'costs_fix'] = cost_profit['capex']
