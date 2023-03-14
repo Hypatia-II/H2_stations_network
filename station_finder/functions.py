@@ -1,9 +1,11 @@
+from optparse import Option
 import branca.colormap as cm
 import json
 import folium
 import geopandas as gpd
 from itertools import chain
 from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
 import numpy as np
 from shapely.geometry import MultiLineString, Point, LineString, Polygon
 from shapely import ops
@@ -647,30 +649,6 @@ class Case(Scenarios):
  
         return scenario
     
-    def calculate_case1(self,
-                        scored_locations: list[object, int],
-                        scenario: pd.DataFrame, 
-                        final_year: int = 2040):
-        
-        locations_2030 = super().distribute_locations(scored_locations, scenario['num_stations_2030'])
-        locations_2030 = [[x, y] for x, y in zip(locations_2030[0], locations_2030[1])]
-        locations_2040 = super().distribute_locations(scored_locations, scenario['num_stations_2040'])
-        locations_2040 = [[x, y] for x, y in zip(locations_2040[0], locations_2040[1])]   
-        
-        scenario = self.new_stations_per_region(output_scenario=scenario)
-        
-        stations_years = {}
-        existing_locations = locations_2030.copy()
-        stations_years[2030] = existing_locations
-        for year in range(2031, final_year+1):
-            remaining_locations = [sublist for sublist in locations_2040 if sublist not in existing_locations]
-            new_stations = super().distribute_locations(remaining_locations, scenario[f'num_stations_{year}'])
-            new_stations = [[x, y] for x, y in zip(new_stations[0], new_stations[1])]
-            stations_years[year] = new_stations
-            existing_locations.extend(new_stations)
-        
-        return stations_years
-    
     def calculate_case3(self, 
                         scored_locations: list[object, int],
                         scenario: pd.DataFrame,
@@ -720,24 +698,217 @@ class ProductionLocator(Scenarios):
     def __init__(self, shapefiles: dict, csvs: dict, jsons: dict, path_conf: str = 'params/config.json', crs: str = '2154') -> None:
         super().__init__(shapefiles, csvs, jsons, path_conf, crs)
         self.shp = shapefiles
+        self.cost_profit = jsons['cost_profit']
+        
+        open_hours = 10
+        self.year_capacity_big = (jsons['production_capacity']['large']['capacity'] / jsons['production_capacity']['large']['power_usage_kwh_per_kgh2']) \
+            * open_hours * 365
+        self.year_capacity_small = (jsons['production_capacity']['small']['capacity'] / jsons['production_capacity']['small']['power_usage_kwh_per_kgh2']) \
+            * open_hours * 365
+
         
     def yearly_demand_per_region(self,
-                                 locations_per_years: dict, 
-                                 cost_profit: pd.DataFrame):
+                                 locations_per_years: dict[int, object]) -> dict[int, object]:
+        """Calculate yearly demand per region
+        
+        Args:
+            locations_per_year: sorted_locations
+            cost_profit: file containing costs and profits for gas stations
+            
+        Returns:
+            region_demand: year over year breakdown of demand per region
+            station_demand: year over year breakdown of demand per station 
+        """
         
         regions = gpd.GeoDataFrame(self.shp['FRA_adm1']).to_crs('2154')
-        demand = {}
         region_demand = {}
+        station_demand = {}
         
         for year, locations in locations_per_years.items():
             
             sorted_locations = gpd.GeoDataFrame(locations, geometry=0)
             region_locations = gpd.sjoin(sorted_locations, regions, how='inner')
             
-            demand_per_location = cost_profit.loc['tpd', region_locations[1]] * 365
+            demand_per_location = self.cost_profit.loc['tpd', region_locations[1]] * 365
             region_locations['demand'] = demand_per_location.values
-            region_demand[year] = region_locations
+            station_demand[year] = region_locations
             
-            demand[year] = region_locations.groupby('NAME_1')['demand'].sum()
+            region_demand[year] = region_locations.groupby('NAME_1')['demand'].sum()
             
-        return demand, region_demand
+        return region_demand, station_demand
+    
+    def combine_demand(self,
+                       station_demand: dict[int, object]) -> pd.DataFrame:
+        """Combine demand into one df
+        
+        Args:
+            station_demand: breakdown of demand per station
+        
+        Returns:
+            demand: dataframe with all points and demand
+        """
+        locations = pd.DataFrame()
+        for year in station_demand.keys():
+            locations = pd.concat([locations, station_demand[year]], axis=0)
+        
+        return locations
+    
+    def clustering_sites(self,
+                         locations: pd.DataFrame,
+                         num_production_sites: Optional[int] = None) -> pd.DataFrame:
+        """Locate sites of hydrogen production stations using clustering
+        
+        Args:
+            demand: file containing breakdonw of demand per station
+            num_production_sites: # of production sites to use (Optional)
+            
+        Returns:
+            production_sites: location of production sites
+        """
+        
+        total_demand = locations['demand'].sum() * 1_000
+        
+        if num_production_sites is None:
+            num_production_sites_big = int(total_demand/self.year_capacity_big)
+            remaining_demand = total_demand - (self.year_capacity_big*num_production_sites_big)
+            num_production_sites_small = np.ceil(remaining_demand/self.year_capacity_small)
+            num_production_sites = int(num_production_sites_big + num_production_sites_small)
+        
+        hydrogen_stations = gpd.GeoDataFrame(locations[[0, 'demand']], geometry=0)
+        hydrogen_stations['lat'] = hydrogen_stations.geometry.x
+        hydrogen_stations['long'] = hydrogen_stations.geometry.y
+        kmeans_model = KMeans(n_clusters=num_production_sites, random_state=0)
+        kmeans_labels = kmeans_model.fit(hydrogen_stations[['lat', 'long']])
+
+        production_sites = pd.DataFrame(kmeans_labels.cluster_centers_, columns=['latitude', 'longitude'])
+        
+        return production_sites
+    
+    def find_distance_demand(self,
+                             production_sites: pd.DataFrame,
+                             station_locations: dict[int, object]) -> pd.DataFrame:
+        
+        """Calculate distance from production sites and nearest one
+        
+        Args:
+            production_sites: df containing lat and long of production sites
+            station_locations: dict containing new stations for each year
+            
+        Returns:
+            output: dataframe containing distance from production sites for stations
+        """
+        output = pd.DataFrame()
+        for year in station_locations.keys():
+            output = pd.concat([output, station_locations[year]], axis=0)
+        output = output[[0, 'demand']]   
+        
+        distance_list = []
+        site_list = []
+        for _, row in tqdm(output.iterrows(), total=output.shape[0]):  
+            min_distance = float('inf')
+            i = 0
+            for _, station_point in production_sites.iterrows():
+                point = Point(station_point['latitude'], station_point['longitude']) 
+                distance = row[0].distance(point)
+                i += 1
+                if distance < min_distance:
+                    min_distance = distance
+                    site = i
+                else:
+                    continue
+            distance_list.append(min_distance)
+            site_list.append(site)
+        
+        output['distance_production'] = distance_list
+        output['site_index'] = site_list
+        
+        return output
+    
+    def get_costs(self,
+                  result: pd.DataFrame) -> tuple[int, int]:
+        """Get costs and leftover demand for cluster sizes
+        
+        Args:
+            result: df containing points and distances from nearest station
+            
+        Returns:
+            final_costs: sum of all production and transportation costs
+            leftover_demand: sum of leftover H2 demand not adressed by stations
+        """
+        result['demand'] = result['demand'] * 1_000 #converting to kg
+        result['distance_production'] = result['distance_production'] / 1_000 #converting to km
+        result = result.groupby('site_index').agg({'distance_production': 'mean',
+                                                0: 'count',
+                                                'demand': 'sum'})
+        result['transport_costs'] = (result['distance_production'] * result[0]) * result['demand'] * 0.008
+        result['size'] = np.where(result['demand'] < self.year_capacity_small,
+                                'small',
+                                'large')
+        result['leftover_demand'] = np.where(np.logical_and((result['size'] == 'large'), 
+                                                            result['demand'] > self.year_capacity_big),
+                                            result['demand'] - self.year_capacity_big,
+                                            0)
+        result['construction_costs'] = np.where(result['size'] == 'large',
+                                                120_000_000 + (120_000_000 * 0.03),
+                                                20_000_000 + (20_000_000 * 0.03))
+
+        final_costs = result[['construction_costs', 'transport_costs']].sum().sum()
+        leftover_demand = result['leftover_demand'].sum()
+        
+        return final_costs, leftover_demand, result
+    
+    def visualize_best_cluster(self,
+                               locations: pd.DataFrame,):
+        """Visualize costs to find best cluster size
+        
+        Args:
+            locations: dataframe containing points and their demand
+            
+        Returns:
+            plot
+        """
+        costs_list = []
+        left_demand = []
+        # redefining hydrogen_station locations and demand
+        hydrogen_stations = gpd.GeoDataFrame(locations[[0, 'demand']], geometry=0)
+        hydrogen_stations['lat'] = hydrogen_stations.geometry.x
+        hydrogen_stations['long'] = hydrogen_stations.geometry.y
+
+        for i in tqdm(range(3, 65)):
+            kmeans_model = KMeans(n_clusters=i, random_state=0).fit(hydrogen_stations[['lat', 'long']])
+            production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['latitude', 'longitude'])
+            
+            result = self.find_distance_demand(production_sites, locations)
+            cost, leftover = self.get_costs(result)
+            costs_list.append(cost)
+            left_demand.append(leftover)
+
+        missed_demand_cost = [(5*x) + y for x, y in zip(left_demand, costs_list)]
+        extra_stations = [np.ceil(x/self.year_capacity_big) for x in left_demand]
+        extra_stations_costs_big = [x * (120_000_000 + (120_000_000 * 0.03)) for x in extra_stations]
+        extra_stations_demand_costs_big = [x+y for x,y in zip(extra_stations_costs_big, costs_list)]
+        extra_stations_costs_small = [x * (20_000_000 + (20_000_000 * 0.03)) for x in extra_stations]
+        extra_stations_demand_costs_small = [x+y for x,y in zip(extra_stations_costs_small, costs_list)]
+        
+        x=range(3,65) # 3 defined as the minimum stations to address demand
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+
+        line1, = ax1.plot(x, costs_list, label='Costs', color='blue')
+        line2, = ax1.plot(x, missed_demand_cost, label='Costs (include leftover demand)', linestyle='dashed', color='blue')
+        line3, = ax1.plot(x, extra_stations_demand_costs_big, label='Costs (addressing all demand [big stations])', linestyle='dashdot', color='blue')
+        line4, = ax1.plot(x, extra_stations_demand_costs_small, label='Costs (addressing all demand [small stations])', linestyle='dotted', color='blue')
+        line5, = ax2.plot(x, left_demand, '-', color="red", label='Leftover demand')
+
+
+        ax1.set_xlabel('# of clusters')
+        ax1.set_ylabel('€', color='blue')
+        ax2.set_ylabel('kgH2', color='red')
+        ax1.set_title('Cluster comparisons')
+
+        # Add legend
+        lines = [line1, line2, line3, line4, line5]
+        labels = [line.get_label() for line in lines]
+        ax1.legend(lines, labels)
+
+        plt.show()
