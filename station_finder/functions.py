@@ -794,12 +794,9 @@ class ProductionLocator(Scenarios):
             production_sites: df containing lat and long of production sites
             station_locations: dict containing new stations for each year
             
-<<<<<<< HEAD
         Returns:
-            output:
-
+            output: dataframe containing distance from production sites for stations
         """
-        
         output = pd.DataFrame()
         for year in station_locations.keys():
             output = pd.concat([output, station_locations[year]], axis=0)
@@ -915,6 +912,3 @@ class ProductionLocator(Scenarios):
         ax1.legend(lines, labels)
 
         plt.show()
-=======
-        return demand, region_demand
->>>>>>> main
