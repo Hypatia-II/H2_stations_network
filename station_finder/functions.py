@@ -340,7 +340,6 @@ class Scenarios(StationLocator):
         Returns:
             polygones: final list of points with their score and number of merged points.
         """
-        top_locations = list(zip(top_locations[0], top_locations[1]))
         distances = {}
         for i in range(len(top_locations)):
             distances.setdefault(i, [])
@@ -432,7 +431,6 @@ class Scenarios(StationLocator):
         Returns:
             new_points: adjusted Point locations and weighted scores
         """
-    
         if isinstance(sorted_locations, gpd.GeoDataFrame):
             lines = self.road_segments
             new_points = []
@@ -796,6 +794,7 @@ class ProductionLocator(Scenarios):
             production_sites: df containing lat and long of production sites
             station_locations: dict containing new stations for each year
             
+<<<<<<< HEAD
         Returns:
             output:
 
@@ -916,3 +915,6 @@ class ProductionLocator(Scenarios):
         ax1.legend(lines, labels)
 
         plt.show()
+=======
+        return demand, region_demand
+>>>>>>> main
