@@ -840,12 +840,12 @@ class ProductionLocator(Scenarios):
             num_production_sites = int(num_production_sites_big + num_production_sites_small)
         
         hydrogen_stations = gpd.GeoDataFrame(locations[[0, 'demand']], geometry=0)
-        hydrogen_stations['lat'] = hydrogen_stations.geometry.x
-        hydrogen_stations['long'] = hydrogen_stations.geometry.y
+        hydrogen_stations['long'] = hydrogen_stations.geometry.x
+        hydrogen_stations['lat'] = hydrogen_stations.geometry.y
         kmeans_model = KMeans(n_clusters=num_production_sites, random_state=0)
-        kmeans_labels = kmeans_model.fit(hydrogen_stations[['lat', 'long']])
+        kmeans_model.fit_predict(hydrogen_stations[['long', 'lat']])
 
-        production_sites = pd.DataFrame(kmeans_labels.cluster_centers_, columns=['latitude', 'longitude'])
+        production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['longitude', 'latitude'])
         
         return production_sites
     
@@ -876,11 +876,12 @@ class ProductionLocator(Scenarios):
             min_distance = float('inf')
             i = 0
             for _, station_point in production_sites.iterrows():
-                point = Point(station_point['latitude'], station_point['longitude']) 
+                point = Point(station_point['longitude'], station_point['latitude']) 
                 distance = row[0].distance(point)
                 if distance < min_distance:
                     min_distance = distance
                     site =  i
+                    i += 1
                 else:
                     i += 1
             distance_list.append(min_distance)
@@ -939,12 +940,13 @@ class ProductionLocator(Scenarios):
         left_demand = []
         # redefining hydrogen_station locations and demand
         hydrogen_stations = gpd.GeoDataFrame(locations[[0, 'demand']], geometry=0)
-        hydrogen_stations['lat'] = hydrogen_stations.geometry.x
-        hydrogen_stations['long'] = hydrogen_stations.geometry.y
+        hydrogen_stations['long'] = hydrogen_stations.geometry.x
+        hydrogen_stations['lat'] = hydrogen_stations.geometry.y
 
         for i in tqdm(range(3, 65)):
-            kmeans_model = KMeans(n_clusters=i, random_state=0).fit(hydrogen_stations[['lat', 'long']])
-            production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['latitude', 'longitude'])
+            kmeans_model = KMeans(n_clusters=i, random_state=0)
+            kmeans_model.fit_predict(hydrogen_stations[['long', 'lat']])
+            production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['longitude', 'latitude'])
             
             result = self.find_distance_demand(production_sites, locations)
             cost, leftover, _ = self.get_costs(result)
