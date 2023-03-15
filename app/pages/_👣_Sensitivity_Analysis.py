@@ -249,6 +249,7 @@ if st.session_state.delta1!=None:
     
 if st.session_state.delta2!=None:
     st.session_state.delta2 = int(st.session_state.delta2)
+    
 col1, col2 = st.columns([2, 2])
 col1.subheader(":clock3: :red[2030]")
 col2.subheader(":hourglass_flowing_sand: :red[2040]")
