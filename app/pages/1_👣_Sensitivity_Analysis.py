@@ -18,7 +18,7 @@ st.set_page_config(layout="wide", page_title="Sensitivity Analysis", page_icon="
 
 st.markdown(
     """
-    # 🤌 Sensitivity Analysis
+    # 👣 Sensitivity Analysis
             
     This page allows you to visualize the results of different scenarios, and even create new scenarios.
     """
@@ -74,9 +74,6 @@ def handle_click_all_vars():
     if st.session_state['autonomy_low_ms_change']:
         st.session_state.autonomy_low_ms = st.session_state.autonomy_low_ms_change  
 
-######################### DELTA #################################
-# if 'df' not in st.session_state:
-#     st.session_state.df = load_data("../data/df_st.csv")
 df = load_data("../data/df_st.csv")
 
 scenario_list_show = [sc.replace("Scenario ", "") for sc in scenario_list]
@@ -115,22 +112,6 @@ station_tank_size_low = conf["station_tank_size"][2]
 
 station_tank_size = [station_tank_size_high, station_tank_size_medium, station_tank_size_low]
 
-# ## create a dropdown menu for the user to select the server name
-# length_to_use = ['longest_line', 'diameter', 'length_max']
-# length_display = ['Longest Line', 'Diameter', 'Length Max']
-# selected_length_display = st.selectbox('Select department length calculation method:', length_display)
-# selected_length = length_to_use[length_display.index(selected_length_display)]
-
-# # Autonomy km
-# col1, col2, col3 = st.columns(3)
-# with col1:
-#     autonomy_high_km = st.number_input('Enter autonomy of first trucks', min_value=1, value=autonomy_high_km)
-# with col2:
-#     autonomy_medium_km = st.number_input('Enter autonomy of second trucks', min_value=1, value=autonomy_medium_km)
-# with col3:
-#     autonomy_low_km = st.number_input('Enter autonomy of third trucks', min_value=1, value=autonomy_low_km)
-    
-
 # Market Share
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -146,17 +127,6 @@ with col3:
                                       value=st.session_state.autonomy_low_ms, on_change=handle_click_all_vars, 
                                       key='autonomy_low_ms_change')
 
-# Fix this part
-# if (autonomy_high_ms+autonomy_medium_ms+autonomy_low_ms)!=1.0:
-#     if (autonomy_high_ms+autonomy_medium_ms)>1:
-#         autonomy_medium_ms = 1 - autonomy_high_ms
-#     elif (autonomy_medium_ms+autonomy_low_ms)>1:
-#         autonomy_low_ms = 1 - autonomy_medium_ms
-#     elif (autonomy_high_ms+autonomy_low_ms)>1:
-#         autonomy_low_ms = 1 - autonomy_high_ms
-#     else:
-#         autonomy_low_ms = 1 - autonomy_high_ms - autonomy_medium_ms
-        
 if (st.session_state.autonomy_high_ms+st.session_state.autonomy_medium_ms+st.session_state.autonomy_low_ms)>1.0:
     st.write('The sum of market shares exceeds 1!')
 
@@ -172,25 +142,6 @@ with col2:
 col1, col2 = st.columns(2)
 col1.metric("", "{:,.0f}".format(int(round((st.session_state.demand_share_2030*10000), 2))))
 col2.metric("", "{:,.0f}".format(int(round((st.session_state.demand_share_2040*60000), 2))))
-
-# Value entry & Selection
-
-
-# col1, col2, col3 = st.columns(3)
-# with col1:
-#     truck_tank_size_high = st.slider('Tank size of first tank', min_value=1, max_value=200, value=truck_tank_size_high, step=1)
-# with col2:
-#     truck_tank_size_medium = st.slider('Tank size of second tank', min_value=1, max_value=200, value=truck_tank_size_medium, step=1)
-# with col3:
-#     truck_tank_size_low = st.slider('Tank size of third tank', min_value=1, max_value=200, value=truck_tank_size_low, step=1)
-
-# col1, col2, col3 = st.columns(3)
-# with col1:
-#     station_tank_size_high = st.slider('Select the tank size of the first small stations', min_value=1, max_value=20, value=station_tank_size_high, step=1)
-# with col2:
-#     station_tank_size_medium = st.slider('Select the tank size of the medium stations', min_value=1, max_value=20, value=station_tank_size_medium, step=1)
-# with col3:
-#     station_tank_size_low = st.slider('Select the tank size of the largest stations', min_value=1, max_value=20, value=station_tank_size_low, step=1)
 
 if 'delta1' not in st.session_state:
     st.session_state.delta1 = None
@@ -219,13 +170,11 @@ if 'scenario_name' not in st.session_state:
     st.session_state.scenario_name = 'Scenario Example'
 scenario_name_ex = st.session_state.scenario_name
 scenario_name_ex = scenario_name_ex.replace("Scenario ", "")
-# scenario_name = 'Scenario Example'
+
 col1, col2 = st.columns(2)
 with col1:
     if st.button('Save Scenario'):
         scenario_name = st.text_input('Enter the name to save: ', scenario_name_ex, on_change=handle_click_no_button_sc, key='sc_name_change')
-        # st.write(st.session_state.scenario_name)
-        # functions_st.save_scenario(scenario_name_temp=st.session_state.scenario_name)
         st.write(('Scenario saved as ' + st.session_state.scenario_name))
 with col2:
     if st.button('Save Predictions'):
@@ -245,7 +194,8 @@ df_show = df_show.astype(int)
 
 st.markdown('##')
 
-st.markdown("<h2 style='color:#FFF'>Number of H2 Stations by:</h2>", unsafe_allow_html=True)
+st.subheader(":fuelpump: :white[Number of H2 Stations]")
+
 if st.session_state.delta1!=None:
     st.session_state.delta1 = int(st.session_state.delta1)
     

@@ -63,7 +63,42 @@ if 'path_to_scenario_html' not in st.session_state:
 df_production = pd.read_csv(st.session_state.path_to_production_sites)
 
 scenario5 = st.selectbox('Select Case of interest:', scenario_names, on_change=handle_click_no_button, key='case_change')
-    
+
+num_stations_list = [20, 13, 13]
+average_distance_list = [42, 56, 58]
+cost_t_list = [4.7, 6.1, 2.7]
+
+ind_sc = int(str(st.session_state.scenario5)[-1])-1
+
+num_stations = num_stations_list[ind_sc]
+average_distance = average_distance_list[ind_sc]
+cost_t = cost_t_list[ind_sc]
+
+col11, col22, col33 = st.columns(3)
+
+col11.subheader(":fuelpump: Large Stations")
+col22.subheader(":motorway: Average Distance")
+col33.subheader(":money_with_wings: Cost")
+
+col11.metric("", '{:,.0f}'.format(num_stations))
+col22.metric("", '{:,.0f} km'.format(average_distance))
+col33.metric("" , '€ {:,.1f} B'.format(cost_t))
+
+st.markdown(
+"""
+The graph plots costs and leftover demand for X amount of production sites
+- Solid line costs (CAPEX + OPEX + Transportation)
+- The dashed line represents the costs + the leftover demand factored in as a cost with each kgH₂ being € 5
+- Dashdot line are costs if we addressed all the remaining demand with all big stations
+- Dotted line are costs if we addressed all remaining demand with only small stations
+
+We find the ideal amount of production sites by doing **K-means clustering** to create clusters of stations with a production site at its center. We then find the best K number by minimizing the costs. The graph helps us see which approach (the different lines) leads to the lowest amount of costs
+"""
+)
+
+
+
+
 with open(st.session_state.path_to_scenario_html,'r') as f: 
     html_data = f.read()
 

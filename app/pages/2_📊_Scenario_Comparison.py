@@ -81,18 +81,13 @@ line_2 = chart_2.mark_line(color='#5DB44C').encode(
 
 col1, col2 = st.columns(2)
 
-col1.subheader(":clock3: :red[2030]")
-col2.subheader(":hourglass_flowing_sand: :red[2040]")
+col1.subheader(":clock3: 2030")
+col2.subheader(":hourglass_flowing_sand: 2040")
 
 with col1:
     st.write(chart_1 + line_1)
 with col2:
     st.write(chart_2 + line_2)
-
-
-
-
-# st.write(chart + line)
 
 st.markdown('##')
 

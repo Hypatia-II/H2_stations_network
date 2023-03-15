@@ -5,19 +5,19 @@ st.set_page_config(page_title="Homepage", page_icon=":home:", layout="wide")
 st.sidebar.title("Contact Us!")
 st.sidebar.info(
     """
-    🧟 [Lea Chader](https://fr.linkedin.com/in/leachader)
+    [Lea Chader](https://fr.linkedin.com/in/leachader)
     """
     """
-    🤡 [Ines Benito](https://uk.linkedin.com/in/inesbenito)
+    [Ines Benito](https://uk.linkedin.com/in/inesbenito)
     """
     """
-    🤮 [Adrian Tan](https://fr.linkedin.com/in/adriantan)
+    [Adrian Tan](https://fr.linkedin.com/in/adriantan)
     """
     """
-    💩 [Salah Mahmoudi](https://www.linkedin.com/in/salahmahmoudi/)
+    [Salah Mahmoudi](https://www.linkedin.com/in/salahmahmoudi/)
     """
     """
-    🧌 [Bechara Fayad](https://lb.linkedin.com/in/bechara-fayad-8a83b6114)
+    [Bechara Fayad](https://lb.linkedin.com/in/bechara-fayad-8a83b6114)
     """
 )
 
