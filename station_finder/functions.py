@@ -545,7 +545,7 @@ class Scenarios(StationLocator):
                                       radius = 5,
                                       weight = 0,
                                       fill_color = 'blue', 
-                                      fill_opacity = 0.6,)                                  
+                                      fill_opacity = 0.7,)                                  
                                   )
         
         roads.add_to(m)
@@ -562,6 +562,67 @@ class Scenarios(StationLocator):
                                       )
             top_2040.add_to(m)
             
+        title = """<div id='maplegend' class='maplegend' 
+                    style='position: absolute; z-index: 9999; border: 0px; background-color: rgba(255, 255, 255, 0.8);
+                        border-radius: 6px; padding: 10px; font-size: 25px; bottom: 10px; left: 10px;'>
+                    <div class='legend-title'>Part 2: Finding the best location for hydrogen stations</div>
+                    <div class='legend-scale'><font size="3"> X-HEC Team 1 / Air Liquide </font></div>
+                </div>
+                """
+        legend = """<div id='maplegend' class='maplegend' 
+                style='position: absolute; z-index:9999; border:2px solid grey; background-color:rgba(255, 255, 255, 0.8);
+                border-radius:6px; padding: 10px; font-size:14px; right: 20px; top: 20px;'>
+                
+            <div class='legend-title'>Legend</div>
+            <div class='legend-scale'>
+                <ul class='legend-labels'>
+                    <li><span style='background:#0000FF;opacity:0.7;border-radius:50%;width:10px;height:10px;display:inline-block;'></span>Hydrogen stations</li>
+                </ul>
+            </div>
+            </div>
+                    <style type='text/css'>
+          .maplegend .legend-title {
+            text-align: left;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 90%;
+            }
+          .maplegend .legend-scale ul {
+            margin: 0;
+            margin-bottom: 5px;
+            padding: 0;
+            float: left;
+            list-style: none;
+            }
+          .maplegend .legend-scale ul li {
+            font-size: 80%;
+            list-style: none;
+            margin-left: 0;
+            line-height: 18px;
+            margin-bottom: 2px;
+            }
+          .maplegend ul.legend-labels li span {
+            display: block;
+            float: left;
+            height: 16px;
+            width: 30px;
+            margin-right: 5px;
+            margin-left: 0;
+            border: 1px solid #999;
+            }
+          .maplegend .legend-source {
+            font-size: 80%;
+            color: #777;
+            clear: both;
+            }
+          .maplegend a {
+            color: #777;
+            }
+            </style>
+            """
+        
+        m.get_root().html.add_child(folium.Element(title))
+        m.get_root().html.add_child(folium.Element(legend))
         m.save(filename)
 
 class Case(Scenarios):
@@ -788,12 +849,12 @@ class ProductionLocator(Scenarios):
             num_production_sites = int(num_production_sites_big + num_production_sites_small)
         
         hydrogen_stations = gpd.GeoDataFrame(locations[[0, 'demand']], geometry=0)
-        hydrogen_stations['lat'] = hydrogen_stations.geometry.x
-        hydrogen_stations['long'] = hydrogen_stations.geometry.y
+        hydrogen_stations['long'] = hydrogen_stations.geometry.x
+        hydrogen_stations['lat'] = hydrogen_stations.geometry.y
         kmeans_model = KMeans(n_clusters=num_production_sites, random_state=0)
-        kmeans_labels = kmeans_model.fit(hydrogen_stations[['lat', 'long']])
+        kmeans_model.fit_predict(hydrogen_stations[['long', 'lat']])
 
-        production_sites = pd.DataFrame(kmeans_labels.cluster_centers_, columns=['latitude', 'longitude'])
+        production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['longitude', 'latitude'])
         
         return production_sites
     
@@ -824,11 +885,12 @@ class ProductionLocator(Scenarios):
             min_distance = float('inf')
             i = 0
             for _, station_point in production_sites.iterrows():
-                point = Point(station_point['latitude'], station_point['longitude']) 
+                point = Point(station_point['longitude'], station_point['latitude']) 
                 distance = row[0].distance(point)
                 if distance < min_distance:
                     min_distance = distance
                     site =  i
+                    i += 1
                 else:
                     i += 1
             distance_list.append(min_distance)
@@ -855,7 +917,7 @@ class ProductionLocator(Scenarios):
         result = result.groupby('site_index').agg({'distance_production': 'mean',
                                                 0: 'count',
                                                 'demand': 'sum'})
-        result['transport_costs'] = (result['distance_production'] * result[0]) * result['demand'] * 0.008
+        result['transport_costs'] = (result['distance_production'] * result[0]) * result['demand'] * 0.008 
         result['size'] = np.where(result['demand'] < self.year_capacity_small,
                                 'small',
                                 'large')
@@ -864,8 +926,8 @@ class ProductionLocator(Scenarios):
                                             result['demand'] - self.year_capacity_big,
                                             0)
         result['construction_costs'] = np.where(result['size'] == 'large',
-                                                120_000_000 + (120_000_000 * 0.03),
-                                                20_000_000 + (20_000_000 * 0.03))
+                                                120_000_000 + (120_000_000 * 0.03 * 15),
+                                                20_000_000 + (20_000_000 * 0.03 * 15))
 
         final_costs = result[['construction_costs', 'transport_costs']].sum().sum()
         leftover_demand = result['leftover_demand'].sum()
@@ -887,12 +949,13 @@ class ProductionLocator(Scenarios):
         left_demand = []
         # redefining hydrogen_station locations and demand
         hydrogen_stations = gpd.GeoDataFrame(locations[[0, 'demand']], geometry=0)
-        hydrogen_stations['lat'] = hydrogen_stations.geometry.x
-        hydrogen_stations['long'] = hydrogen_stations.geometry.y
+        hydrogen_stations['long'] = hydrogen_stations.geometry.x
+        hydrogen_stations['lat'] = hydrogen_stations.geometry.y
 
         for i in tqdm(range(3, 65)):
-            kmeans_model = KMeans(n_clusters=i, random_state=0).fit(hydrogen_stations[['lat', 'long']])
-            production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['latitude', 'longitude'])
+            kmeans_model = KMeans(n_clusters=i, random_state=0)
+            kmeans_model.fit_predict(hydrogen_stations[['long', 'lat']])
+            production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['longitude', 'latitude'])
             
             result = self.find_distance_demand(production_sites, locations)
             cost, leftover, _ = self.get_costs(result)
