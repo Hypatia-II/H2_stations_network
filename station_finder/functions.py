@@ -1,12 +1,19 @@
+from optparse import Option
 import branca.colormap as cm
+from branca.element import Template, MacroElement
+import json
 import folium
 import geopandas as gpd
+from itertools import chain
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
 import numpy as np
-from shapely.geometry import MultiLineString, Point, LineString
+from shapely.geometry import MultiLineString, Point, LineString, Polygon
 from shapely import ops
 import pandas as pd
+import pickle
 from tqdm import tqdm
-from itertools import chain
+from typing import Optional
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -202,32 +209,47 @@ class StationLocator():
         return score
     
     def get_best_location(self,
-                          grid_size: int = 100_000,) -> list:
+                          grid_size: int = 25_000,
+                          gas_stations: bool = False,
+                          candidate_locations: pd.DataFrame = None,
+                          save_file: bool = False) -> list:
         
         """Identify top X locations on map based on pre-defined parameters
         
         Args:
             grid_size = distance between points on map, in meters
-            num_locations = number of top locations to be returned
+            gas_stations = whether to include gas_stations into calculations
+            candidate_location = predefined locations to calculate scores for
             
         Returns:
             sorted_locations: coordinates, weighted_score of top X locations
         """
+        if grid_size > 25_000:
+            grid_size = 25_000
+            print("The grid size was changed to it's maximum value of 25_0000.")
+        
         network = self.create_network(self.road_segments, self.traffic_only)
 
-        # creating the boundary of our grid
-        xmin, ymin, xmax, ymax = network.bounds
-        x_coords = np.arange(xmin, xmax + grid_size, grid_size)
-        y_coords = np.arange(ymin, ymax + grid_size, grid_size)
+        if candidate_locations is None:
+            # creating the boundary of our grid
+            xmin, ymin, xmax, ymax = network.bounds
+            x_coords = np.arange(xmin, xmax + grid_size, grid_size)
+            y_coords = np.arange(ymin, ymax + grid_size, grid_size)
+            
+            # setting up the grid points
+            grid_points = np.transpose([np.tile(x_coords, len(y_coords)), np.repeat(y_coords, len(x_coords))])
+            candidate_locations = [Point(x, y) for x, y in grid_points]
+        else:
+            candidate_locations = candidate_locations.geometry
         
-        # setting up the grid points
-        grid_points = np.transpose([np.tile(x_coords, len(y_coords)), np.repeat(y_coords, len(x_coords))])
-        candidate_locations = [Point(x, y) for x, y in grid_points]
-        
-        weighted_scores  = [self.score_locations(candidate, network) for candidate in tqdm(candidate_locations)]
+        weighted_scores  = [self.score_locations(candidate, network, gas_stations=gas_stations) for candidate in tqdm(candidate_locations)]
             
         sorted_locations = sorted(zip(candidate_locations, weighted_scores), key=lambda x: x[1], reverse=True)
         
+        if save_file:
+            with open('sorted_locations.pkl', 'wb') as f:
+                pickle.dump(sorted_locations, f)
+                
         return sorted_locations
     
     def visualize_results(self,
@@ -278,9 +300,13 @@ class StationLocator():
 class Scenarios(StationLocator):
     def __init__(self, 
                  shapefiles: dict, 
-                 csvs: dict, 
+                 csvs: dict,
+                 jsons: dict, 
+                 path_conf: str = 'params/config.json',
                  crs: str = '2154') -> None:
         super().__init__(shapefiles, csvs, crs)
+        self.cost_profit = jsons['cost_profit']
+        self.conf = json.load(open(path_conf, "r"))
 
     def distribute_locations(self, 
                              sorted_locations: list[object],
@@ -307,7 +333,11 @@ class Scenarios(StationLocator):
             
         return top_points_by_region
     
+<<<<<<< HEAD
     def merge_closest_points(self, top_locations: gpd.GeoDataFrame):
+=======
+    def merge_closest_points(self, top_locations: gpd.GeoDataFrame, distance_min: int=5_000):
+>>>>>>> main
         """Merge close points into one station.
 
         Args:
@@ -315,12 +345,11 @@ class Scenarios(StationLocator):
         Returns:
             polygones: final list of points with their score and number of merged points.
         """
-        top_locations = list(zip(top_locations[0], top_locations[1]))
         distances = {}
         for i in range(len(top_locations)):
             distances.setdefault(i, [])
             for j in range(len(top_locations)):
-                if top_locations[i][0].distance(top_locations[j][0]) <= 10000:
+                if top_locations[i][0].distance(top_locations[j][0]) <= distance_min:
                     distance = top_locations[i][0].distance(top_locations[j][0])
                     distances[i].append((top_locations[j][0].xy[0][0], top_locations[j][0].xy[1][0]))
         
@@ -344,7 +373,7 @@ class Scenarios(StationLocator):
                 line = LineString([values[0], values[1]])
                 point = line.centroid
             else:
-                point = geometry.Polygon(values).centroid
+                point = Polygon(values).centroid
             avg_score = np.mean([item[1] for item in top_locations if item[0] in values])
             #if not any(p.equals(point) for p, _ in polygones):
             polygones.append((point, avg_score, len(values)))
@@ -407,51 +436,75 @@ class Scenarios(StationLocator):
         Returns:
             new_points: adjusted Point locations and weighted scores
         """
-    
         if isinstance(sorted_locations, gpd.GeoDataFrame):
             lines = self.road_segments
             new_points = []
-            for i, j in tqdm(zip(sorted_locations[0].tolist(), sorted_locations[1].tolist()), total=sorted_locations.shape[0]):
+            for i, j in tqdm(zip(sorted_locations[0].tolist(), 
+                                    sorted_locations[1].tolist()), total=sorted_locations.shape[0]):
                 best_point = self.nearest_part_of_linestrings(lines, i)
-                new_points.append([Point(best_point), j, 1])
+                new_points.append([Point(best_point), j])
 
         elif isinstance(sorted_locations, list):
             lines = self.road_segments
             new_points = []
             for loc in tqdm(sorted_locations):
                 best_point = self.nearest_part_of_linestrings(lines, loc[0])
-                new_points.append([Point(best_point), loc[1], loc[2]])
+                new_points.append([Point(best_point), loc[1]])
     
         else:
-            ValueError('Data must either be GeoDataFrame or list')
+            TypeError('Data must either be GeoDataFrame or list')
             
         return new_points
     
+<<<<<<< HEAD
     def get_size_station(self, new_points: list[object]):
         """Get the size of each station based on its score and number of merged stations.
+=======
+    def get_size_station(self, regions_dem: pd.Series, new_points: list[object], score_total: int, part3_scenario: str=""):
+        """Get the size of each station based on demand by station.
+>>>>>>> main
         Args:
             new_points: list of locations, score and number of stations merged.
         Returns:
-            new_points: list of locations and size of station
+            new_points: list of locations, size of station and score
         """
-        thresholds = [
-            np.percentile([k*j for i, j, k in new_points], 50),
-            np.percentile([k*j for i, j, k in new_points], 75)
-            ]
-        final_points = []
+        capacity_stations = self.conf["capacity_stations"]
+        profitability_stations = self.conf["profitability_stations"]
+
+        regions_dem = regions_dem.to_dict()
+        demand_total = sum(regions_dem.values())
+
+        capacity_dict = {
+                    "small": capacity_stations[0],
+                    "medium": capacity_stations[1],
+                    "large": capacity_stations[2]}
+        profitability_dict = {
+            "small": profitability_stations[0],
+            "medium": profitability_stations[1],
+            "large": profitability_stations[2]
+        }
+
+        stations_final = []
         for i in range(len(new_points)):
-            val = new_points[i][1]*new_points[i][2]
-            if val <= thresholds[0]:
-                final_points.append((new_points[i][0],"small"))
-            elif val <= thresholds[1]:
-                final_points.append((new_points[i][0],"medium"))
+            if part3_scenario == "scenario3":
+                station_size = "small"
             else:
-                final_points.append((new_points[i][0],"large"))
-        return final_points
+                station_size = ""
+            demand = new_points[i][1]/score_total*demand_total
+            if demand > profitability_dict["large"]*capacity_dict["large"]:
+                station_size = "large"
+            elif demand > profitability_dict["medium"]*capacity_dict["medium"]:
+                station_size = "medium"
+            elif demand > profitability_dict["small"]*capacity_dict["small"]:
+                station_size = "small"
+            stations_final.append((
+                new_points[i][0], station_size,
+                new_points[i][1], demand))
+        return stations_final
     
     def visualize_scenarios(self,
                             sorted_locations_2030: list,
-                            sorted_locations_2040: list, 
+                            sorted_locations_2040: Optional[list] = None, 
                             colors: list[str] = None, 
                             filename: str = 'map.html') -> None:
         
@@ -462,8 +515,7 @@ class Scenarios(StationLocator):
             sorted_locations_2040: station locations in 2040
             colors: list of colors for highways
             filename: name of file
-        """
-        
+        """       
         france_center = [46.2276, 2.2137]
         m = folium.Map(location=france_center, zoom_start=6, tiles='cartodbpositron')
 
@@ -485,22 +537,516 @@ class Scenarios(StationLocator):
                                  name='Routes',
                                  style_function=style_function
                                 )
-        top_2030 = folium.GeoJson(gpd.GeoDataFrame(sorted_locations_2030, geometry=0).set_crs(self.crs),
-                              marker = folium.CircleMarker(radius = 5, 
-                                           weight = 0, 
-                                           fill_color = 'blue', 
-                                           fill_opacity = 1)
-                              )
         
-        top_2040 = folium.GeoJson(gpd.GeoDataFrame(sorted_locations_2040, geometry=0).set_crs(self.crs),
-                              marker = folium.CircleMarker(radius = 3, 
-                                           weight = 0, 
-                                           fill_color = 'red', 
-                                           fill_opacity = 0.6)
-                              )
+        # hydrogen location dots
+        sorted_locations_2030 = gpd.GeoDataFrame(sorted_locations_2030, geometry=0).set_crs(self.crs)
+        top_2030 = folium.GeoJson(sorted_locations_2030,
+                                  marker = folium.CircleMarker(
+                                      radius = 5,
+                                      weight = 0,
+                                      fill_color = 'blue', 
+                                      fill_opacity = 0.6,)                                  
+                                  )
         
         roads.add_to(m)
         top_2030.add_to(m)
-        top_2040.add_to(m)
         
+        if sorted_locations_2040 is not None:
+            sorted_locations_2040 = gpd.GeoDataFrame(sorted_locations_2040, geometry=0).set_crs(self.crs)
+            top_2040 = folium.GeoJson(sorted_locations_2040,
+                                      marker = folium.CircleMarker(
+                                          radius = 3, 
+                                          weight = 0, 
+                                          fill_color = 'red',
+                                          fill_opacity = 1,)
+                                      )
+            top_2040.add_to(m)
+            
         m.save(filename)
+
+class Case(Scenarios):
+    def __init__(
+            self, shapefiles: dict, csvs: dict,
+            jsons: dict, path_conf: str = 'params/config.json', crs: str = '2154') -> None:
+        super().__init__(shapefiles, csvs, jsons, path_conf, crs)
+        self.shapefiles = shapefiles
+        self.csvs = csvs
+        self.jsons = jsons
+        self.crs = crs
+        
+        # competitor stations
+        self.competitors = self.csvs['te_dv']
+        self.competitors = self.competitors.dropna(subset=['Coordinates'])
+        self.competitors['H2 Conversion'] = self.competitors['H2 Conversion'].fillna(0)
+        self.competitors[['lat', 'long']] = self.competitors['Coordinates'].str.split(',', expand=True).astype(float)
+        self.competitors['geometry'] = self.competitors.apply(lambda row: Point(row['long'], row['lat']), axis=1)
+        self.competitors = gpd.GeoDataFrame(self.competitors).set_crs('WGS84').to_crs('2154')
+        
+        competitors_starting = self.competitors[self.competitors['H2 Conversion'] == 1]
+        competitors_remaining = self.competitors[self.competitors['H2 Conversion'] == 0]
+        
+        total_gas_stations = super().get_best_location(candidate_locations=competitors_remaining) # for sake of computations
+        total_h2_stations = super().get_best_location(candidate_locations=competitors_starting)
+        self.total_gas_stations = [list(t) for t in total_gas_stations]
+        self.total_h2_stations = [list(t) for t in total_h2_stations]
+        
+    def recalculate_locations(self, 
+                              locations: list[object, int], 
+                              competitor_locations: list[object, int],
+                              max_distance: int) -> list[object, int]:
+        
+        if type(locations[0]) == tuple:
+            locations = [list(t) for t in locations]
+        if type(competitor_locations) == list:
+            competitor_locations = gpd.GeoDataFrame(competitor_locations, geometry=0)
+
+        
+        for point in tqdm(locations):
+            station_score = 0.0
+            station_weight = -50
+            for station in competitor_locations.geometry:
+                distance = point[0].distance(station)
+                
+                if distance < max_distance/2:
+                    station_score = (max_distance - distance) / max_distance
+                elif distance <= max_distance:
+                    station_score = (max_distance - distance) / max_distance / 2
+                
+            point[1] += station_score * station_weight
+            
+        return sorted(locations, key=lambda x: x[1], reverse=True)
+    
+    def market_share(self, 
+                     output_scenario: pd.DataFrame,
+                     sorted_locations: list[int, object], 
+                     competitor_locations: list[int, object]):
+        """Get % market share for Total gas stations and Air Liquide
+        Args:
+            sorted_locations: list of sorted scored locations
+            competitor_locations: list of scored competitor locations
+        
+        Returns:
+            scenario: recalculated scenario ratios
+        """
+        
+        share_total = sum([x[1] for x in competitor_locations])
+        share_us = sum([x[1] for x in sorted_locations])
+        
+        scenario = output_scenario.copy()
+        scenario['num_stations_2030'] = np.ceil(scenario['num_stations_2030'] * (share_us/(share_total + share_us))).astype(int)
+        scenario['num_stations_2040'] = np.ceil(scenario['num_stations_2040'] * (share_us/(share_total + share_us))).astype(int)
+        
+        return scenario
+    
+    def new_stations_per_region(self,
+                                output_scenario: pd.DataFrame):
+        """Calculate yearly stations to build per region
+        
+        Args:
+            output_scenario: scenarios defined in part 1
+            
+        Returns:
+            scenario: a breakdown of stations per year and regions
+        """
+        
+        scenario = output_scenario.copy()
+        avg_increase = (scenario['num_stations_2040'] - scenario['num_stations_2030']) / 10
+
+        for i in range(9, 0, -1):
+            scenario[f'num_stations_203{i}'] = scenario['num_stations_2030'] + avg_increase * i
+            scenario[f'num_stations_203{i}'] = scenario[f'num_stations_203{i}'].round().astype(int)
+        for i in range(9, 0, -1):
+            scenario[f'num_stations_203{i}'] = (scenario[f'num_stations_203{i}'] - scenario[f'num_stations_203{i-1}'])
+        
+        scenario['num_stations_2040'] = scenario['num_stations_2040'] - scenario.drop(columns=['num_stations_2040']).sum(axis=1)
+ 
+        return scenario
+    
+    def calculate_case3(self, 
+                        scored_locations: list[object, int],
+                        scenario: pd.DataFrame,
+                        max_distance: int = 50_000,
+                        final_year: int = 2040,):
+        
+        """Simulate scenario 3 for part 3
+        
+        Args:
+            scored_locations:
+            scenario:
+            max_distance:
+            final_year:
+            
+        Returns:
+            station_years: dict of new locations per year
+        """
+        
+        total_h2_stations = self.total_h2_stations        
+        
+        all_locations = self.recalculate_locations(scored_locations, total_h2_stations, max_distance=max_distance)[0:1500] 
+        # only taking the top 1500 locations because don't need to look at all candidate locations
+        locations_2030 = super().distribute_locations(all_locations, scenario['num_stations_2030'])
+        locations_2030 = [[x, y] for x, y in zip(locations_2030[0], locations_2030[1])]
+
+        scenario = self.new_stations_per_region(output_scenario=scenario)
+        
+        stations_years = {}
+        existing_locations = locations_2030.copy()
+        stations_years[2030] = locations_2030
+        for year in range(2031, final_year+1):
+            print('Calculating year', year)
+            new_stations_count = sum(scenario[f'num_stations_{year}'])
+            total_h2_stations.extend(self.total_gas_stations[:new_stations_count])
+            del self.total_gas_stations[:new_stations_count]
+            
+            remaining_locations = [sublist for sublist in all_locations if sublist not in existing_locations]
+            new_stations = self.recalculate_locations(remaining_locations, total_h2_stations, max_distance=max_distance)
+            new_stations = super().distribute_locations(new_stations, scenario[f'num_stations_{year}'])
+            new_stations = [[x, y] for x, y in zip(new_stations[0], new_stations[1])]
+            stations_years[year] = new_stations
+            existing_locations.extend(new_stations)
+        
+        return stations_years
+
+class ProductionLocator(Scenarios):
+    def __init__(self, shapefiles: dict, csvs: dict, jsons: dict, path_conf: str = 'params/config.json', crs: str = '2154') -> None:
+        super().__init__(shapefiles, csvs, jsons, path_conf, crs)
+        self.shp = shapefiles
+        self.cost_profit = jsons['cost_profit']
+        
+        open_hours = 10
+        self.year_capacity_big = (jsons['production_capacity']['large']['capacity'] / jsons['production_capacity']['large']['power_usage_kwh_per_kgh2']) \
+            * open_hours * 365
+        self.year_capacity_small = (jsons['production_capacity']['small']['capacity'] / jsons['production_capacity']['small']['power_usage_kwh_per_kgh2']) \
+            * open_hours * 365
+
+        
+    def yearly_demand_per_region(self,
+                                 locations_per_years: dict[int, object]) -> dict[int, object]:
+        """Calculate yearly demand per region
+        
+        Args:
+            locations_per_year: sorted_locations
+            cost_profit: file containing costs and profits for gas stations
+            
+        Returns:
+            region_demand: year over year breakdown of demand per region
+            station_demand: year over year breakdown of demand per station 
+        """
+        
+        regions = gpd.GeoDataFrame(self.shp['FRA_adm1']).to_crs('2154')
+        region_demand = {}
+        station_demand = {}
+        
+        for year, locations in locations_per_years.items():
+            
+            sorted_locations = gpd.GeoDataFrame(locations, geometry=0)
+            region_locations = gpd.sjoin(sorted_locations, regions, how='inner')
+            
+            demand_per_location = self.cost_profit.loc['tpd', region_locations[1]] * 365
+            region_locations['demand'] = demand_per_location.values
+            station_demand[year] = region_locations
+            
+            region_demand[year] = region_locations.groupby('NAME_1')['demand'].sum()
+            
+        return region_demand, station_demand
+    
+    def combine_demand(self,
+                       station_demand: dict[int, object]) -> pd.DataFrame:
+        """Combine demand into one df
+        
+        Args:
+            station_demand: breakdown of demand per station
+        
+        Returns:
+            demand: dataframe with all points and demand
+        """
+        locations = pd.DataFrame()
+        for year in station_demand.keys():
+            locations = pd.concat([locations, station_demand[year]], axis=0)
+        
+        return locations
+    
+    def clustering_sites(self,
+                         locations: pd.DataFrame,
+                         num_production_sites: Optional[int] = None) -> pd.DataFrame:
+        """Locate sites of hydrogen production stations using clustering
+        
+        Args:
+            demand: file containing breakdonw of demand per station
+            num_production_sites: # of production sites to use (Optional)
+            
+        Returns:
+            production_sites: location of production sites
+        """
+        
+        total_demand = locations['demand'].sum() * 1_000
+        
+        if num_production_sites is None:
+            num_production_sites_big = int(total_demand/self.year_capacity_big)
+            remaining_demand = total_demand - (self.year_capacity_big*num_production_sites_big)
+            num_production_sites_small = np.ceil(remaining_demand/self.year_capacity_small)
+            num_production_sites = int(num_production_sites_big + num_production_sites_small)
+        
+        hydrogen_stations = gpd.GeoDataFrame(locations[[0, 'demand']], geometry=0)
+        hydrogen_stations['lat'] = hydrogen_stations.geometry.x
+        hydrogen_stations['long'] = hydrogen_stations.geometry.y
+        kmeans_model = KMeans(n_clusters=num_production_sites, random_state=0)
+        kmeans_labels = kmeans_model.fit(hydrogen_stations[['lat', 'long']])
+
+        production_sites = pd.DataFrame(kmeans_labels.cluster_centers_, columns=['latitude', 'longitude'])
+        
+        return production_sites
+    
+    def find_distance_demand(self,
+                             production_sites: pd.DataFrame,
+                             station_locations: dict[int, object]) -> pd.DataFrame:
+        
+        """Calculate distance from production sites and nearest one
+        
+        Args:
+            production_sites: df containing lat and long of production sites
+            station_locations: dict containing new stations for each year
+            
+        Returns:
+            output: dataframe containing distance from production sites for stations
+        """
+        if type(station_locations) == dict:
+            output = pd.DataFrame()
+            for year in station_locations.keys():
+                output = pd.concat([output, station_locations[year]], axis=0)
+            output = output[[0, 'demand']]   
+        else:
+            output = station_locations[[0, 'demand']] 
+            
+        distance_list = []
+        site_list = []
+        for _, row in output.iterrows():  
+            min_distance = float('inf')
+            i = 0
+            for _, station_point in production_sites.iterrows():
+                point = Point(station_point['latitude'], station_point['longitude']) 
+                distance = row[0].distance(point)
+                if distance < min_distance:
+                    min_distance = distance
+                    site =  i
+                else:
+                    i += 1
+            distance_list.append(min_distance)
+            site_list.append(site)
+        
+        output['distance_production'] = distance_list
+        output['site_index'] = site_list
+        
+        return output
+    
+    def get_costs(self,
+                  result: pd.DataFrame) -> tuple[int, int]:
+        """Get costs and leftover demand for cluster sizes
+        
+        Args:
+            result: df containing points and distances from nearest station
+            
+        Returns:
+            final_costs: sum of all production and transportation costs
+            leftover_demand: sum of leftover H2 demand not adressed by stations
+        """
+        result['demand'] = result['demand'] * 1_000 #converting to kg
+        result['distance_production'] = result['distance_production'] / 1_000 #converting to km
+        result = result.groupby('site_index').agg({'distance_production': 'mean',
+                                                0: 'count',
+                                                'demand': 'sum'})
+        result['transport_costs'] = (result['distance_production'] * result[0]) * result['demand'] * 0.008
+        result['size'] = np.where(result['demand'] < self.year_capacity_small,
+                                'small',
+                                'large')
+        result['leftover_demand'] = np.where(np.logical_and((result['size'] == 'large'), 
+                                                            result['demand'] > self.year_capacity_big),
+                                            result['demand'] - self.year_capacity_big,
+                                            0)
+        result['construction_costs'] = np.where(result['size'] == 'large',
+                                                120_000_000 + (120_000_000 * 0.03),
+                                                20_000_000 + (20_000_000 * 0.03))
+
+        final_costs = result[['construction_costs', 'transport_costs']].sum().sum()
+        leftover_demand = result['leftover_demand'].sum()
+        
+        return final_costs, leftover_demand, result
+    
+    def visualize_best_cluster(self,
+                               locations: pd.DataFrame,
+                               savefile: str = 'best_cluster_plot.jpg'):
+        """Visualize costs to find best cluster size
+        
+        Args:
+            locations: dataframe containing points and their demand
+            
+        Returns:
+            plot
+        """
+        costs_list = []
+        left_demand = []
+        # redefining hydrogen_station locations and demand
+        hydrogen_stations = gpd.GeoDataFrame(locations[[0, 'demand']], geometry=0)
+        hydrogen_stations['lat'] = hydrogen_stations.geometry.x
+        hydrogen_stations['long'] = hydrogen_stations.geometry.y
+
+        for i in tqdm(range(3, 65)):
+            kmeans_model = KMeans(n_clusters=i, random_state=0).fit(hydrogen_stations[['lat', 'long']])
+            production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['latitude', 'longitude'])
+            
+            result = self.find_distance_demand(production_sites, locations)
+            cost, leftover, _ = self.get_costs(result)
+            costs_list.append(cost)
+            left_demand.append(leftover)
+
+        missed_demand_cost = [(5*x) + y for x, y in zip(left_demand, costs_list)]
+        extra_stations_big = [np.ceil(x/self.year_capacity_big) for x in left_demand]
+        extra_stations_small = [np.ceil(x/self.year_capacity_small) for x in left_demand]
+        extra_stations_costs_big = [x * (120_000_000 + (120_000_000 * 0.03)) for x in extra_stations_big]
+        extra_stations_demand_costs_big = [x+y for x,y in zip(extra_stations_costs_big, costs_list)]
+        extra_stations_costs_small = [x * (20_000_000 + (20_000_000 * 0.03)) for x in extra_stations_small]
+        extra_stations_demand_costs_small = [x+y for x,y in zip(extra_stations_costs_small, costs_list)]
+        
+        x=range(3,65) # 3 defined as the minimum stations to address demand
+        fig, ax1 = plt.subplots()
+        fig.set_size_inches(18.5, 10.5)
+        plt.style.use('default')
+        ax2 = ax1.twinx()
+
+        line1, = ax1.plot(x, costs_list, label='Costs', color='blue')
+        line2, = ax1.plot(x, missed_demand_cost, label='Costs (include leftover demand)', linestyle='dashed', color='blue')
+        line3, = ax1.plot(x, extra_stations_demand_costs_big, label='Costs (addressing all demand [big stations])', linestyle='dashdot', color='blue')
+        line4, = ax1.plot(x, extra_stations_demand_costs_small, label='Costs (addressing all demand [small stations])', linestyle='dotted', color='blue')
+        line5, = ax2.plot(x, left_demand, '-', color="red", label='Leftover demand')
+
+
+        ax1.set_xlabel('# of clusters')
+        ax1.set_ylabel('€', color='blue')
+        ax2.set_ylabel('kgH2', color='red')
+        ax1.set_title('Cluster comparisons')
+
+        # Add legend
+        lines = [line1, line2, line3, line4, line5]
+        labels = [line.get_label() for line in lines]
+        ax1.legend(lines, labels)
+
+        plt.savefig(savefile)
+        print('Best cluster size is:', missed_demand_cost.index(min(missed_demand_cost)) + 3)
+        
+    def visualize_on_map(self,
+                         hydrogen_stations: pd.DataFrame, 
+                         production_sites: pd.DataFrame,
+                         filename: str = 'part4viz.html') -> folium.GeoJson:
+        
+        france_center = [46.2276, 2.2137]
+        m = folium.Map(location=france_center, zoom_start=6, tiles='cartodbpositron')
+        
+        values = np.quantile(self.data['PL_traffic'], [np.linspace(0, 1, 7)])
+        values = values[0]
+        colors = ['#00ae53', '#86dc76', '#daf8aa', '#ffe6a4', '#ff9a61', '#ee0028']
+            
+        colormap_dept = cm.StepColormap(colors=colors,
+                                        vmin=min(self.data['PL_traffic']),
+                                        vmax=max(self.data['PL_traffic']),
+                                        index=values)
+
+        style_function = lambda x: {'color': colormap_dept(x['properties']['PL_traffic']),
+                                    'weight': 2.5,
+                                    'fillOpacity': 1}
+        
+        roads = folium.GeoJson(self.data,
+                                 name='Routes',
+                                 style_function=style_function
+                                )
+        
+        # hydrogen location dots
+        hydrogen_stations = gpd.GeoDataFrame(hydrogen_stations, geometry=0).set_crs(self.crs)
+        stations = folium.GeoJson(hydrogen_stations,
+                                  marker = folium.CircleMarker(
+                                      radius = 3,
+                                      weight = 0,
+                                      fill_color = 'blue', 
+                                      fill_opacity = 0.7,)                                  
+                                  )
+        
+        # hydrogen location dots
+        production_sites = gpd.GeoDataFrame(production_sites, geometry='geometry').set_crs(self.crs)
+        sites = folium.GeoJson(production_sites,
+                                  marker = folium.CircleMarker(
+                                      radius = 12,
+                                      weight = 0,
+                                      fill_color = 'red', 
+                                      fill_opacity = 0.9,
+                                      tooltip = folium.GeoJsonTooltip(
+                                                fields=['distance_production', 0, 'size'],
+                                                aliases=['Average distance:', 'Station count:', 'Production size:'],
+                                                localize=False,
+                                                ),)                                  
+                                  )
+        roads.add_to(m)
+        sites.add_to(m)
+        stations.add_to(m)
+        title = """<div id='maplegend' class='maplegend' 
+                    style='position: absolute; z-index: 9999; border: 0px; background-color: rgba(255, 255, 255, 0.8);
+                        border-radius: 6px; padding: 10px; font-size: 25px; bottom: 10px; left: 10px;'>
+                    <div class='legend-title'>Part 4: Optimizing production site locations</div>
+                    <div class='legend-scale'><font size="3"> X-HEC Team 1 / Air Liquide </font></div>
+                </div>
+                """
+        legend = """<div id='maplegend' class='maplegend' 
+                style='position: absolute; z-index:9999; border:2px solid grey; background-color:rgba(255, 255, 255, 0.8);
+                border-radius:6px; padding: 10px; font-size:14px; right: 20px; top: 20px;'>
+                
+            <div class='legend-title'>Legend</div>
+            <div class='legend-scale'>
+                <ul class='legend-labels'>
+                    <li><span style='background:#0000FF;opacity:0.7;border-radius:50%;width:10px;height:10px;display:inline-block;'></span>Hydrogen stations</li>
+                    <li><span style='background:#ff0000;opacity:0.7;border-radius:50%;width:15px;height:15px;display:inline-block;'></span>Production sites</li>
+                </ul>
+            </div>
+            </div>
+                    <style type='text/css'>
+          .maplegend .legend-title {
+            text-align: left;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 90%;
+            }
+          .maplegend .legend-scale ul {
+            margin: 0;
+            margin-bottom: 5px;
+            padding: 0;
+            float: left;
+            list-style: none;
+            }
+          .maplegend .legend-scale ul li {
+            font-size: 80%;
+            list-style: none;
+            margin-left: 0;
+            line-height: 18px;
+            margin-bottom: 2px;
+            }
+          .maplegend ul.legend-labels li span {
+            display: block;
+            float: left;
+            height: 16px;
+            width: 30px;
+            margin-right: 5px;
+            margin-left: 0;
+            border: 1px solid #999;
+            }
+          .maplegend .legend-source {
+            font-size: 80%;
+            color: #777;
+            clear: both;
+            }
+          .maplegend a {
+            color: #777;
+            }
+            </style>
+            """
+        
+        m.get_root().html.add_child(folium.Element(title))
+        m.get_root().html.add_child(folium.Element(legend))
+        m.save(filename)
+        
