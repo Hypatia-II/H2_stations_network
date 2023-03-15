@@ -104,10 +104,10 @@ with open(st.session_state.path_to_scenario_html,'r') as f:
 
 col1, col2 = st.columns([2,2])
 with col1:
-    st.header("Cluster Comparison")
+    st.header(":knot: Cluster Comparison")
     image1 = Image.open(st.session_state.path_to_plot_sc5)
     st.image(image1, caption='Clusters', width=700)
     
 with col2:
-    st.header("H2 Production Sites and Stations Locations")
+    st.header(":world_map: H2 Production Sites and Stations Locations")
     st.components.v1.html(html_data, width=700, height=700)

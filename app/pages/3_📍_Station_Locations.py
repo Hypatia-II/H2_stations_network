@@ -52,9 +52,9 @@ scenario1 = st.selectbox('Select Scenarios of interest:', scenarios1_list, on_ch
 scenario_names_l = ['Baseline', 'Best Case', 'Worst Case', 'Truck Type Sensitivity']
 ind_sc = scenario_names_l.index(st.session_state.scenario1)
 
-num_stations_small_l = [106, 50, 47, 55]
-num_stations_medium_l = [66, 68, 66, 45]
-num_stations_large_l = [137, 149, 137, 198]
+num_stations_small_l = [92, 50, 47, 55]
+num_stations_medium_l = [69, 68, 66, 45]
+num_stations_large_l = [148, 149, 137, 198]
 
 num_stations_small = num_stations_small_l[ind_sc]
 num_stations_medium = num_stations_medium_l[ind_sc]

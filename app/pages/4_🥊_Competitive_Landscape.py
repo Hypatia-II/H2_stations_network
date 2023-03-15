@@ -151,7 +151,7 @@ chart_1 = alt.Chart(df_bar).mark_bar(color="#D8FAD9").encode(
     x=alt.X('year:O', title='Year'),
     y=alt.Y('Count:Q', title='Count')
 ).properties(
-    width=500
+    width=450
 )
 
 line_1 = chart_1.mark_line(color='#5DB44C').encode(
@@ -163,7 +163,7 @@ chart_2 = alt.Chart(df_cost).mark_bar(color="#D8FAD9").encode(
     x=alt.X('year:O', title='Year'),
     y=alt.Y('cumsumwithgrowth_profit:Q', title='Cumulative Sum with Growth Profit (M€)'),
 ).properties(
-    width=500
+    width=450
 )
 
 line_2 = chart_2.mark_line(color='green').encode(
@@ -175,7 +175,7 @@ chart_3 = alt.Chart(df_cost).mark_bar(color="#E5B08D").encode(
     x=alt.X('year:O', title='Year'),
     y=alt.Y('costs_fix:Q', title='Fixed Costs (M€)')
 ).properties(
-    width=500
+    width=450
 )
 
 line_3 = chart_3.mark_line(color='#E56714').encode(
@@ -185,8 +185,7 @@ line_3 = chart_3.mark_line(color='#E56714').encode(
 
 profitable_year = df_cost.loc[df_cost["total_profit"].gt(0).idxmax(),'year']
 reimbursed_year = df_cost.loc[df_cost["total_profit_cumsum"].gt(0).idxmax(),'year']
-profitable_tot_profit = int(df_cost.total_profit[-1:])
-reimbursed_tot_profit_cumsum = int(df_cost.total_profit_cumsum[-1:])
+total_prof = int(df_cost.total_profit_cumsum[-1:])
 
 tot_Capex = int(df_cost.costs_fix.sum())
 num_stations_small = int(sum(df_final_points['size']=="small"))
@@ -200,7 +199,7 @@ col22.subheader(":house: Small Stations")
 col33.subheader(":office: Medium Stations")
 col44.subheader(":european_castle: Large Station")
 
-col11.metric("" , '{:,.0f} M€'.format(tot_Capex))
+col11.metric("" , '€ {:,.0f} M'.format(tot_Capex))
 col22.metric("", '{:,.0f}'.format(num_stations_small))
 col33.metric("", '{:,.0f}'.format(num_stations_medium))
 col44.metric("", '{:,.0f}'.format(num_stations_large))
@@ -213,7 +212,7 @@ if st.session_state.scenario4=='scenario2':
     str_sc = "**Baseline Scenario**"
     st.subheader(":bulb: Hypothesis Scenario Assumed - " + str_sc)
 if st.session_state.scenario4=='scenario3':
-    str_sc = "**Baseline Scenario"
+    str_sc = "**Baseline Scenario**"
     st.subheader(":bulb: Hypothesis Scenario Assumed - " + str_sc)
         
 col1, col2, col3 = st.columns(3)
@@ -221,10 +220,14 @@ with col1:
     st.write("Count of number of stations built per year")
     st.write(chart_1 + line_1)
 with col2:
-    st.write("Capex per Year (M€)")
+    st.write("Capex per Year (€M)")
     st.write(chart_3 + line_3)
 with col3:
-    st.write("Operational profit per year using a price of **5 € per kgH₂ (M€)**")
+    st.write("Operational profit per year using a price of **5 € per kgH₂ (€M)**")
     st.write(chart_2 + line_2)
 
+st.subheader("This scenario would start being profitable in " + str(int(profitable_year)) + ", and would fully reimburse the investment by " + str(int(profitable_year)) + ", with total final profite equal to € " + str('{:,.0f}'.format(total_prof)) + " M by 2040.")
+
+st.subheader(":fuelpump: Stations Positions")
 st_folium(m, width=800)
+
