@@ -1,5 +1,6 @@
 from optparse import Option
 import branca.colormap as cm
+from branca.element import Template, MacroElement
 import json
 import folium
 import geopandas as gpd
@@ -797,25 +798,27 @@ class ProductionLocator(Scenarios):
         Returns:
             output: dataframe containing distance from production sites for stations
         """
-        output = pd.DataFrame()
-        for year in station_locations.keys():
-            output = pd.concat([output, station_locations[year]], axis=0)
-        output = output[[0, 'demand']]   
-        
+        if type(station_locations) == dict:
+            output = pd.DataFrame()
+            for year in station_locations.keys():
+                output = pd.concat([output, station_locations[year]], axis=0)
+            output = output[[0, 'demand']]   
+        else:
+            output = station_locations[[0, 'demand']] 
+            
         distance_list = []
         site_list = []
-        for _, row in tqdm(output.iterrows(), total=output.shape[0]):  
+        for _, row in output.iterrows():  
             min_distance = float('inf')
             i = 0
             for _, station_point in production_sites.iterrows():
                 point = Point(station_point['latitude'], station_point['longitude']) 
                 distance = row[0].distance(point)
-                i += 1
                 if distance < min_distance:
                     min_distance = distance
-                    site = i
+                    site =  i
                 else:
-                    continue
+                    i += 1
             distance_list.append(min_distance)
             site_list.append(site)
         
@@ -858,7 +861,8 @@ class ProductionLocator(Scenarios):
         return final_costs, leftover_demand, result
     
     def visualize_best_cluster(self,
-                               locations: pd.DataFrame,):
+                               locations: pd.DataFrame,
+                               savefile: str = 'best_cluster_plot.jpg'):
         """Visualize costs to find best cluster size
         
         Args:
@@ -879,19 +883,22 @@ class ProductionLocator(Scenarios):
             production_sites = pd.DataFrame(kmeans_model.cluster_centers_, columns=['latitude', 'longitude'])
             
             result = self.find_distance_demand(production_sites, locations)
-            cost, leftover = self.get_costs(result)
+            cost, leftover, _ = self.get_costs(result)
             costs_list.append(cost)
             left_demand.append(leftover)
 
         missed_demand_cost = [(5*x) + y for x, y in zip(left_demand, costs_list)]
-        extra_stations = [np.ceil(x/self.year_capacity_big) for x in left_demand]
-        extra_stations_costs_big = [x * (120_000_000 + (120_000_000 * 0.03)) for x in extra_stations]
+        extra_stations_big = [np.ceil(x/self.year_capacity_big) for x in left_demand]
+        extra_stations_small = [np.ceil(x/self.year_capacity_small) for x in left_demand]
+        extra_stations_costs_big = [x * (120_000_000 + (120_000_000 * 0.03)) for x in extra_stations_big]
         extra_stations_demand_costs_big = [x+y for x,y in zip(extra_stations_costs_big, costs_list)]
-        extra_stations_costs_small = [x * (20_000_000 + (20_000_000 * 0.03)) for x in extra_stations]
+        extra_stations_costs_small = [x * (20_000_000 + (20_000_000 * 0.03)) for x in extra_stations_small]
         extra_stations_demand_costs_small = [x+y for x,y in zip(extra_stations_costs_small, costs_list)]
         
         x=range(3,65) # 3 defined as the minimum stations to address demand
         fig, ax1 = plt.subplots()
+        fig.set_size_inches(18.5, 10.5)
+        plt.style.use('default')
         ax2 = ax1.twinx()
 
         line1, = ax1.plot(x, costs_list, label='Costs', color='blue')
@@ -911,4 +918,123 @@ class ProductionLocator(Scenarios):
         labels = [line.get_label() for line in lines]
         ax1.legend(lines, labels)
 
-        plt.show()
+        plt.savefig(savefile)
+        print('Best cluster size is:', missed_demand_cost.index(min(missed_demand_cost)) + 3)
+        
+    def visualize_on_map(self,
+                         hydrogen_stations: pd.DataFrame, 
+                         production_sites: pd.DataFrame,
+                         filename: str = 'part4viz.html') -> folium.GeoJson:
+        
+        france_center = [46.2276, 2.2137]
+        m = folium.Map(location=france_center, zoom_start=6, tiles='cartodbpositron')
+        
+        values = np.quantile(self.data['PL_traffic'], [np.linspace(0, 1, 7)])
+        values = values[0]
+        colors = ['#00ae53', '#86dc76', '#daf8aa', '#ffe6a4', '#ff9a61', '#ee0028']
+            
+        colormap_dept = cm.StepColormap(colors=colors,
+                                        vmin=min(self.data['PL_traffic']),
+                                        vmax=max(self.data['PL_traffic']),
+                                        index=values)
+
+        style_function = lambda x: {'color': colormap_dept(x['properties']['PL_traffic']),
+                                    'weight': 2.5,
+                                    'fillOpacity': 1}
+        
+        roads = folium.GeoJson(self.data,
+                                 name='Routes',
+                                 style_function=style_function
+                                )
+        
+        # hydrogen location dots
+        hydrogen_stations = gpd.GeoDataFrame(hydrogen_stations, geometry=0).set_crs(self.crs)
+        stations = folium.GeoJson(hydrogen_stations,
+                                  marker = folium.CircleMarker(
+                                      radius = 3,
+                                      weight = 0,
+                                      fill_color = 'blue', 
+                                      fill_opacity = 0.7,)                                  
+                                  )
+        
+        # hydrogen location dots
+        production_sites = gpd.GeoDataFrame(production_sites, geometry='geometry').set_crs(self.crs)
+        sites = folium.GeoJson(production_sites,
+                                  marker = folium.CircleMarker(
+                                      radius = 12,
+                                      weight = 0,
+                                      fill_color = 'red', 
+                                      fill_opacity = 0.9,
+                                      tooltip = folium.GeoJsonTooltip(
+                                                fields=['distance_production', 0, 'size'],
+                                                aliases=['Average distance:', 'Station count:', 'Production size:'],
+                                                localize=False,
+                                                ),)                                  
+                                  )
+        roads.add_to(m)
+        sites.add_to(m)
+        stations.add_to(m)
+        title = """<div id='maplegend' class='maplegend' 
+                    style='position: absolute; z-index: 9999; border: 0px; background-color: rgba(255, 255, 255, 0.8);
+                        border-radius: 6px; padding: 10px; font-size: 25px; bottom: 10px; left: 10px;'>
+                    <div class='legend-title'>Part 4: Optimizing production site locations</div>
+                    <div class='legend-scale'><font size="3"> X-HEC Team 1 / Air Liquide </font></div>
+                </div>
+                """
+        legend = """<div id='maplegend' class='maplegend' 
+                style='position: absolute; z-index:9999; border:2px solid grey; background-color:rgba(255, 255, 255, 0.8);
+                border-radius:6px; padding: 10px; font-size:14px; right: 20px; top: 20px;'>
+                
+            <div class='legend-title'>Legend</div>
+            <div class='legend-scale'>
+                <ul class='legend-labels'>
+                    <li><span style='background:#0000FF;opacity:0.7;border-radius:50%;width:10px;height:10px;display:inline-block;'></span>Hydrogen stations</li>
+                    <li><span style='background:#ff0000;opacity:0.7;border-radius:50%;width:15px;height:15px;display:inline-block;'></span>Production sites</li>
+                </ul>
+            </div>
+            </div>
+                    <style type='text/css'>
+          .maplegend .legend-title {
+            text-align: left;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 90%;
+            }
+          .maplegend .legend-scale ul {
+            margin: 0;
+            margin-bottom: 5px;
+            padding: 0;
+            float: left;
+            list-style: none;
+            }
+          .maplegend .legend-scale ul li {
+            font-size: 80%;
+            list-style: none;
+            margin-left: 0;
+            line-height: 18px;
+            margin-bottom: 2px;
+            }
+          .maplegend ul.legend-labels li span {
+            display: block;
+            float: left;
+            height: 16px;
+            width: 30px;
+            margin-right: 5px;
+            margin-left: 0;
+            border: 1px solid #999;
+            }
+          .maplegend .legend-source {
+            font-size: 80%;
+            color: #777;
+            clear: both;
+            }
+          .maplegend a {
+            color: #777;
+            }
+            </style>
+            """
+        
+        m.get_root().html.add_child(folium.Element(title))
+        m.get_root().html.add_child(folium.Element(legend))
+        m.save(filename)
+        
