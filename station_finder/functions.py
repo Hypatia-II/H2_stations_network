@@ -533,7 +533,7 @@ class Scenarios(StationLocator):
                                       radius = 5,
                                       weight = 0,
                                       fill_color = 'blue', 
-                                      fill_opacity = 0.6,)                                  
+                                      fill_opacity = 0.7,)                                  
                                   )
         
         roads.add_to(m)
@@ -550,6 +550,67 @@ class Scenarios(StationLocator):
                                       )
             top_2040.add_to(m)
             
+        title = """<div id='maplegend' class='maplegend' 
+                    style='position: absolute; z-index: 9999; border: 0px; background-color: rgba(255, 255, 255, 0.8);
+                        border-radius: 6px; padding: 10px; font-size: 25px; bottom: 10px; left: 10px;'>
+                    <div class='legend-title'>Part 2: Finding the best location for hydrogen stations</div>
+                    <div class='legend-scale'><font size="3"> X-HEC Team 1 / Air Liquide </font></div>
+                </div>
+                """
+        legend = """<div id='maplegend' class='maplegend' 
+                style='position: absolute; z-index:9999; border:2px solid grey; background-color:rgba(255, 255, 255, 0.8);
+                border-radius:6px; padding: 10px; font-size:14px; right: 20px; top: 20px;'>
+                
+            <div class='legend-title'>Legend</div>
+            <div class='legend-scale'>
+                <ul class='legend-labels'>
+                    <li><span style='background:#0000FF;opacity:0.7;border-radius:50%;width:10px;height:10px;display:inline-block;'></span>Hydrogen stations</li>
+                </ul>
+            </div>
+            </div>
+                    <style type='text/css'>
+          .maplegend .legend-title {
+            text-align: left;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 90%;
+            }
+          .maplegend .legend-scale ul {
+            margin: 0;
+            margin-bottom: 5px;
+            padding: 0;
+            float: left;
+            list-style: none;
+            }
+          .maplegend .legend-scale ul li {
+            font-size: 80%;
+            list-style: none;
+            margin-left: 0;
+            line-height: 18px;
+            margin-bottom: 2px;
+            }
+          .maplegend ul.legend-labels li span {
+            display: block;
+            float: left;
+            height: 16px;
+            width: 30px;
+            margin-right: 5px;
+            margin-left: 0;
+            border: 1px solid #999;
+            }
+          .maplegend .legend-source {
+            font-size: 80%;
+            color: #777;
+            clear: both;
+            }
+          .maplegend a {
+            color: #777;
+            }
+            </style>
+            """
+        
+        m.get_root().html.add_child(folium.Element(title))
+        m.get_root().html.add_child(folium.Element(legend))
         m.save(filename)
 
 class Case(Scenarios):
