@@ -26,10 +26,14 @@ class Competition_Scenarios():
         final_points_copy = gpd.GeoDataFrame(final_points, geometry=0).set_crs('2154')
         final_points_copy.rename(columns={0:"points", 1:"size", 2:"score", 3:"2040_demand"}, inplace=True)
         final_points_copy.sort_values(by="score", ascending=False, inplace=True)
-        final_points_copy.reset_index(inplace=True, drop=True)  
+        final_points_copy.reset_index(inplace=True, drop=True)
+        final_points_copy = final_points_copy[~(final_points_copy["size"]=="")]
         if scenario == "scenario2":
             n_2030_total = np.sum(self.jsons['output_scenario1']["num_stations_2030"])
             n_2040_total = np.sum(self.jsons['output_scenario1']["num_stations_2040"])
+            n = n_2030_total + n_2040_total
+            n_2030_total = int(n_2030_total/n*len(final_points_copy))
+            n_2040_total = int(n_2040_total/n*len(final_points_copy))
             n_2030=int(np.round(n_2030_total/2))
             n_2040=int(np.round(n_2040_total/2))
             n = n_2030_total + n_2040_total
@@ -43,8 +47,8 @@ class Competition_Scenarios():
             n_2030 = np.sum(self.jsons['output_scenario2']["num_stations_2030"])
             n_2040 = np.sum(self.jsons['output_scenario2']["num_stations_2040"])
             n_tot = n_2030 + n_2040
-            n_2030 = int(len(final_points)*n_2030/n_tot)
-            n_2040 = int(len(final_points)*n_2040/n_tot)
+            n_2030 = int(len(final_points_copy)*n_2030/n_tot)
+            n_2040 = int(len(final_points_copy)*n_2040/n_tot)
             n = n_2030 + n_2040
             final_point_scenario = final_points_copy.iloc[:n, :]
         
@@ -70,7 +74,7 @@ class Competition_Scenarios():
         """
         cost_profit_dict = self.jsons["cost_profit"]
         growth_rate = self.conf["growth_rate"]
-        stations_cost_rev = final_point_scenario[~final_point_scenario.year.isna()][~(final_point_scenario["size"]=="")]
+        stations_cost_rev = final_point_scenario[~final_point_scenario.year.isna()]
         for i, row in tqdm(stations_cost_rev.iterrows(), total=stations_cost_rev.shape[0]):
             cost_profit = cost_profit_dict[row[1]]
             stations_cost_rev.at[i, 'costs_fix'] = cost_profit['capex']

@@ -452,7 +452,7 @@ class Scenarios(StationLocator):
             
         return new_points
     
-    def get_size_station(self, regions_dem: pd.Series, new_points: list[object], score_total: int):
+    def get_size_station(self, regions_dem: pd.Series, new_points: list[object], score_total: int, part3_scenario: str=""):
         """Get the size of each station based on demand by station.
         Args:
             new_points: list of locations, score and number of stations merged.
@@ -477,7 +477,10 @@ class Scenarios(StationLocator):
 
         stations_final = []
         for i in range(len(new_points)):
-            station_size = ""
+            if part3_scenario == "scenario3":
+                station_size = "small"
+            else:
+                station_size = ""
             demand = new_points[i][1]/score_total*demand_total
             if demand > profitability_dict["large"]*capacity_dict["large"]:
                 station_size = "large"
