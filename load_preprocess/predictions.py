@@ -216,6 +216,8 @@ class Number_Stations():
         """
         df_json = df[["region", "num_stations_2030", "num_stations_2040"]].set_index("region").to_dict()
         with open('data/output_' + self.scenario + '.json', 'w+') as f:
+<<<<<<< HEAD
+=======
             json.dump(df_json, f, ensure_ascii=False)
         return None
     
@@ -226,6 +228,7 @@ class Number_Stations():
         df["RT_2040_total"] = df["R_2040_total"]*(np.mean(self.truck_tank_size))
         df_json = df[["region", "RT_2030_total", "RT_2040_total"]].set_index("region").to_dict()
         with open('data/output_refills_' + self.scenario + '.json', 'w+') as f:
+>>>>>>> main
             json.dump(df_json, f, ensure_ascii=False)
         return None
 

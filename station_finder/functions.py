@@ -75,13 +75,13 @@ class StationLocator():
                                     (self.data['PL_traffic'].max() - self.data['PL_traffic'].min())
         self.road_segments = self.data.geometry
         self.traffic_only = self.data.PL_traffic
-
+        print('gas stations')
         # Loading gas station data
         self.stations = csvs['pdv'].dropna(subset=['latlng'])
         self.stations[['lat', 'long']] = self.stations['latlng'].str.split(',', expand=True).astype(float)
         self.stations['geometry'] = self.stations.apply(lambda row: Point(row['long'], row['lat']), axis=1)
         self.stations = gpd.GeoDataFrame(self.stations[['id', 'typeroute', 'services', 'geometry']]).set_crs(self.crs)
-        
+        print('hub data')
         ## Loading production hub data
         self.air_logis = pd.concat([shapefiles['Aires_logistiques_elargies'], shapefiles['Aires_logistiques_denses']])
         self.air_logis_info = csvs['aire_loqistique'].rename(columns={'Surface totale': 'surface_totale'})
@@ -90,7 +90,7 @@ class StationLocator():
         self.air_logis['surface_totale'] = (self.air_logis['surface_totale'] - self.air_logis['surface_totale'].min()) / \
                                             (self.air_logis['surface_totale'].max() - self.air_logis['surface_totale'].min())
         self.air_logis['geometry'] = self.air_logis.geometry.centroid
-        
+        print('region departments')
         ## Region & departments
         self.regions = gpd.GeoDataFrame(shapefiles['FRA_adm1']).to_crs(self.crs)
     
@@ -333,7 +333,11 @@ class Scenarios(StationLocator):
             
         return top_points_by_region
     
+<<<<<<< HEAD
+    def merge_closest_points(self, top_locations: gpd.GeoDataFrame):
+=======
     def merge_closest_points(self, top_locations: gpd.GeoDataFrame, distance_min: int=5_000):
+>>>>>>> main
         """Merge close points into one station.
 
         Args:
@@ -452,8 +456,13 @@ class Scenarios(StationLocator):
             
         return new_points
     
+<<<<<<< HEAD
+    def get_size_station(self, new_points: list[object]):
+        """Get the size of each station based on its score and number of merged stations.
+=======
     def get_size_station(self, regions_dem: pd.Series, new_points: list[object], score_total: int, part3_scenario: str=""):
         """Get the size of each station based on demand by station.
+>>>>>>> main
         Args:
             new_points: list of locations, score and number of stations merged.
         Returns:
