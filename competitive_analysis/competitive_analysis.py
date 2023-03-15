@@ -32,8 +32,8 @@ class Competition_Scenarios():
             n_2030_total = np.sum(self.jsons['output_scenario1']["num_stations_2030"])
             n_2040_total = np.sum(self.jsons['output_scenario1']["num_stations_2040"])
             n = n_2030_total + n_2040_total
-            n_2030_total = int(n_2030_total/n*len(final_points))
-            n_2040_total = int(n_2040_total/n*len(final_points))
+            n_2030_total = int(n_2030_total/n*len(final_points_copy))
+            n_2040_total = int(n_2040_total/n*len(final_points_copy))
             n_2030=int(np.round(n_2030_total/2))
             n_2040=int(np.round(n_2040_total/2))
             n = n_2030_total + n_2040_total
@@ -47,8 +47,8 @@ class Competition_Scenarios():
             n_2030 = np.sum(self.jsons['output_scenario2']["num_stations_2030"])
             n_2040 = np.sum(self.jsons['output_scenario2']["num_stations_2040"])
             n_tot = n_2030 + n_2040
-            n_2030 = int(len(final_points)*n_2030/n_tot)
-            n_2040 = int(len(final_points)*n_2040/n_tot)
+            n_2030 = int(len(final_points_copy)*n_2030/n_tot)
+            n_2040 = int(len(final_points_copy)*n_2040/n_tot)
             n = n_2030 + n_2040
             final_point_scenario = final_points_copy.iloc[:n, :]
         
