@@ -904,7 +904,7 @@ class ProductionLocator(Scenarios):
         result = result.groupby('site_index').agg({'distance_production': 'mean',
                                                 0: 'count',
                                                 'demand': 'sum'})
-        result['transport_costs'] = (result['distance_production'] * result[0]) * result['demand'] * 0.008
+        result['transport_costs'] = (result['distance_production'] * result[0]) * result['demand'] * 0.008 
         result['size'] = np.where(result['demand'] < self.year_capacity_small,
                                 'small',
                                 'large')
@@ -913,8 +913,8 @@ class ProductionLocator(Scenarios):
                                             result['demand'] - self.year_capacity_big,
                                             0)
         result['construction_costs'] = np.where(result['size'] == 'large',
-                                                120_000_000 + (120_000_000 * 0.03),
-                                                20_000_000 + (20_000_000 * 0.03))
+                                                120_000_000 + (120_000_000 * 0.03 * 15),
+                                                20_000_000 + (20_000_000 * 0.03 * 15))
 
         final_costs = result[['construction_costs', 'transport_costs']].sum().sum()
         leftover_demand = result['leftover_demand'].sum()
