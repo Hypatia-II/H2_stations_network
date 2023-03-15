@@ -79,9 +79,14 @@ class Competition_Scenarios():
             cost_profit = cost_profit_dict[row[1]]
             stations_cost_rev.at[i, 'costs_fix'] = cost_profit['capex']
             stations_cost_rev.at[i, 'costs_operational'] = cost_profit['capex'] * cost_profit['yearly_opex']
-            stations_cost_rev.at[i, "revenue"] = min(
-                 cost_profit["price_per_kg"]*row[3]/(growth_rate**(2040-int(row["year"]))),
+            if row[3]<0:
+                stations_cost_rev.at[i, "revenue"] = min(
+                 cost_profit["price_per_kg"]*abs(row[3])*0.0000001/(growth_rate**(2040-int(row["year"]))),
                  cost_profit["price_per_kg"]*cost_profit["capacity"])*365/1000000
+            else:
+                stations_cost_rev.at[i, "revenue"] = min(
+                    cost_profit["price_per_kg"]*row[3]/(growth_rate**(2040-int(row["year"]))),
+                    cost_profit["price_per_kg"]*cost_profit["capacity"])*365/1000000
             stations_cost_rev.at[i, "profit_op_year"] = stations_cost_rev.at[i, "revenue"] - stations_cost_rev.at[i, 'costs_operational']
         return stations_cost_rev
     

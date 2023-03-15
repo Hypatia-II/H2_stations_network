@@ -1,16 +1,8 @@
-altair==4.2.0
 branca==0.6.0
 folium==0.14.0
 geopandas==0.12.1
-matplotlib==3.5.2
 numpy==1.22.3
 pandas==1.4.2
-Pillow==9.4.0
-plotly==5.11.0
-pyproj==3.4.0
-scikit_learn==1.2.2
 scipy==1.7.3
 Shapely==1.8.5.post1
-streamlit==1.15.1
-streamlit_folium==0.11.0
 tqdm==4.64.0
